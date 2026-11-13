@@ -185,16 +185,18 @@ body.editing .edit-only.block{display:flex!important}
 .timeline{list-style:none;margin:0;padding:0;position:relative}
 .timeline::before{content:"";position:absolute;left:62px;top:8px;bottom:8px;border-left:var(--line) dashed var(--ink)}
 .timeline.bounce > li{animation:bounceIn .6s cubic-bezier(.3,1.5,.5,1) both}
-.tl-item{display:grid;grid-template-columns:50px 26px 1fr;align-items:start;gap:0;margin-bottom:14px;position:relative}
-.tl-time{font-size:14px;text-align:right;padding-top:12px;padding-right:4px;white-space:nowrap}
-.tl-dot{width:18px;height:18px;margin:14px auto 0;border:var(--line) solid var(--ink);border-radius:50%;background:var(--yellow);position:relative;z-index:1}
+.tl-item{display:grid;grid-template-columns:50px 26px 1fr;align-items:stretch;gap:0;margin-bottom:14px;position:relative}
+.tl-time{font-size:14px;text-align:right;padding:12px 4px 12px 0;white-space:nowrap;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end}
+.tl-dots{display:flex;flex-direction:column;align-items:center;padding:14px 0 15px}
+.tl-span{flex:1;width:8px;margin:-2px 0;background:var(--yellow);border-left:2px solid var(--ink);border-right:2px solid var(--ink);position:relative;z-index:0}
+.tl-dot.end{width:15px;height:15px}
+.tl-dot{width:18px;height:18px;flex:none;border:var(--line) solid var(--ink);border-radius:50%;background:var(--yellow);position:relative;z-index:1}
 .tl-card{background:var(--card);border:var(--line) solid var(--ink);border-radius:20px;padding:10px 14px 12px;box-shadow:3px 3px 0 var(--ink);min-width:0}
 .tl-card h4{font-size:17px;margin:4px 0 2px;word-break:break-word}
 .tl-note{margin:2px 0 0;font-size:14px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
 .tl-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .tl-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.tl-time .tl-end{display:block;color:var(--muted);font-size:12px;line-height:1.25}
-.tl-time .tl-end::before{content:"│";display:block;font-size:10px;line-height:1;padding-right:14px;color:var(--muted)}
+.tl-time .tl-end{display:block;color:var(--muted);font-size:13px}
 .tag.dur{background:var(--paper);color:var(--ink)}
 .tl-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .tl-imgs button{padding:0;border:2px solid var(--ink);border-radius:12px;overflow:hidden;width:76px;height:76px;background:var(--paper);cursor:zoom-in;flex:none}
@@ -206,6 +208,8 @@ body.editing .edit-only.block{display:flex!important}
 .img-prev{position:relative;width:76px;height:76px;border:2px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--paper)}
 .img-prev button{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:2px solid var(--ink);background:var(--card);font-size:12px;padding:0;cursor:pointer;line-height:1}
 .time-wrap{display:flex;gap:6px;align-items:center}
+.time-pick{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
+.field .time-pick select{flex:1;min-width:0;padding:8px 6px;text-align:center}
 .time-wrap input{flex:1;min-width:0}
 dialog#lb{background:transparent;border:0;box-shadow:none;padding:0;width:auto;max-width:96vw;max-height:94dvh;margin:auto;border-radius:0;overflow:visible}
 dialog#lb::backdrop{background:rgba(62,58,57,.75)}
@@ -1071,7 +1075,10 @@ function renderDays(bounce){
     const imgs = (it.images || []).length ? `<div class="tl-imgs">${it.images.map((id,n) => `<button type="button" data-act="view-img" data-id="${esc(id)}" aria-label="放大第 ${n+1} 張圖片"><img data-img="${esc(id)}" alt="截圖 ${n+1}"></button>`).join("")}</div>` : "";
     return `<li class="tl-item">
       <div class="tl-time">${esc(it.time || "")}${it.endTime ? `<span class="tl-end">${esc(it.endTime)}</span>` : ""}</div>
-      <div class="tl-dot" style="background:${tr.color?`var(--${tr.color})`:"var(--yellow)"}"></div>
+      <div class="tl-dots" style="--c:${tr.color?`var(--${tr.color})`:"var(--yellow)"}">
+        <div class="tl-dot" style="background:var(--c)"></div>
+        ${it.endTime ? `<div class="tl-span" style="background:var(--c)"></div><div class="tl-dot end" style="background:var(--c)" title="結束 ${esc(it.endTime)}"></div>` : ""}
+      </div>
       <div class="tl-card">
         <div class="tl-row">${tr.label && it.transport ? `<span class="tag ${tr.color}">${tr.icon} ${esc(tr.label)}</span>` : ""}${dur ? `<span class="tag dur">⏱ ${dur}</span>` : ""}</div>
         <h4>${esc(it.title || "（未命名）")}</h4>
@@ -1169,7 +1176,13 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
         <input type="file" accept="image/*" multiple hidden data-file="${fd.k}">
       </div>
       <div class="img-previews" data-previews="${fd.k}"></div></div>`;
-    else if(fd.type === "time" && fd.clearable) return `<label class="field"><span>${esc(fd.label)}</span><span class="time-wrap"><input type="time" name="${fd.k}" value="${esc(v)}"><button type="button" class="btn icon-btn" data-clear="${fd.k}" aria-label="清除${esc(fd.label)}">✕</button></span></label>`;
+    else if(fd.type === "time"){
+      // 24 小時制：時、分兩個下拉選單（不受手機／電腦語系的上午下午影響）
+      const [hh, mm] = /^\d{1,2}:\d{2}$/.test(v) ? v.split(":") : ["", ""];
+      const opts = (n, cur) => `<option value="">--</option>` + Array.from({length:n}, (_,i) => { const t = String(i).padStart(2,"0"); return `<option value="${t}" ${t === cur.padStart(2,"0") && cur !== "" ? "selected" : ""}>${t}</option>`; }).join("");
+      const pick = `<span class="time-pick" data-time="${fd.k}"><select data-h aria-label="${esc(fd.label)}：時">${opts(24, hh)}</select>:<select data-m aria-label="${esc(fd.label)}：分">${opts(60, mm)}</select><input type="hidden" name="${fd.k}" value="${esc(hh !== "" ? hh.padStart(2,"0") + ":" + mm : "")}"></span>`;
+      return `<div class="field"><span>${esc(fd.label)}</span><span class="time-wrap">${pick}${fd.clearable ? `<button type="button" class="btn icon-btn" data-clear="${fd.k}" aria-label="清除${esc(fd.label)}">✕</button>` : ""}</span></div>`;
+    }
     else if(fd.type === "checkbox") return `<label class="field check-field"><input type="checkbox" name="${fd.k}" ${v?"checked":""}><span>${esc(fd.label)}</span></label>`;
     else input = `<input type="${fd.type||"text"}" name="${fd.k}" value="${esc(v)}" placeholder="${esc(fd.ph||"")}" ${fd.req?"required":""} ${fd.type==="text"&&fd.upper?'style="text-transform:uppercase"':""}>`;
     return `<label class="field"><span>${esc(fd.label)}</span>${input}</label>`;
@@ -1219,7 +1232,16 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     const rm = e.target.closest("[data-rm]");
     if(rm){ const [k,i] = rm.dataset.rm.split(":"); imgState[k].splice(+i,1); drawPreviews(k); return; }
     const clr = e.target.closest("[data-clear]");
-    if(clr){ form.elements[clr.dataset.clear].value = ""; }
+    if(clr){ const tp = $(`[data-time="${clr.dataset.clear}"]`, form); $$("select", tp).forEach(x => x.value = ""); form.elements[clr.dataset.clear].value = ""; }
+  });
+  // 時間選單：選了「時」沒選「分」就自動補 00；把「時」清成 -- 就是不填
+  form.addEventListener("change", e => {
+    const tp = e.target.closest("[data-time]"); if(!tp) return;
+    const h = $("[data-h]", tp), m = $("[data-m]", tp);
+    if(e.target === h && h.value && !m.value) m.value = "00";
+    if(e.target === m && m.value && !h.value) h.value = "00";
+    if(e.target === h && !h.value) m.value = "";
+    form.elements[tp.dataset.time].value = h.value ? `${h.value}:${m.value || "00"}` : "";
   });
   form.addEventListener("submit", async e => {
     e.preventDefault();
