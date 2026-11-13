@@ -439,7 +439,7 @@ html.no-motion{scroll-behavior:auto}
         <button class="btn owner-only trip-only" data-act="copy-trip">📄 複製成新旅程</button>
         <button class="btn owner-only trip-only" data-act="export">📤 匯出備份</button>
         <button class="btn owner-only trip-only" data-act="import">📥 匯入備份</button>
-        <button class="btn owner-only trip-only" data-act="load-sample">🗼 載入範例內容</button>
+        <button class="btn owner-only trip-only" data-act="load-sample">🗼 補上範例（只填空白）</button>
         <button class="btn coral owner-only trip-only" data-act="reset-blank">🧹 清空這趟內容</button>
         <button class="btn coral owner-only trip-only" data-act="delete-trip">🗑️ 刪除這趟旅程</button>
       </div>
@@ -1138,7 +1138,7 @@ function toast(msg, undo){
   t.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button class="btn">復原</button>' : ""}`;
   if(undo) $("button", t).onclick = () => { undo(); t.remove(); };
   document.body.appendChild(t);
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), undo ? 5000 : 2600);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), undo ? 10000 : 2600);
 }
 function removeWithUndo(arr, id, label){
   const i = arr.findIndex(x => x.id === id); if(i < 0) return;
@@ -1237,8 +1237,27 @@ const ACTIONS = {
   import(){ $("#importFile").click(); },
   "reset-blank"(){ const old = data; data = blankTrip(); activeDay = null; editing = true; save(); render(); location.hash = "#cover";
     toast("已清空成空白公版", () => { data = old; save(); render(); }); },
-  "load-sample"(){ const old = data; data = normalize(clone(SAMPLE)); activeDay = null; save(); render();
-    toast("已載入範例行程", () => { data = old; save(); render(); }); },
+  "load-sample"(){
+    // 只補「空白」的部分，已經填好的資料一律不動
+    const old = clone(data), s = normalize(clone(SAMPLE)), filled = [];
+    const fresh = arr => arr.map(x => ({...clone(x), id:uid()}));
+    const blank = blankTrip();
+    ["title","subtitle","dest"].forEach(k => { if(!data[k] || data[k] === blank[k]){ data[k] = s[k]; filled.push({title:"旅程名稱",subtitle:"副標題",dest:"目的地"}[k]); } });
+    const LABEL = {flights:"航班", stays:"住宿", todos:"待辦清單", predepart:"出發前清單", luggage:"行李清單"};
+    Object.keys(LABEL).forEach(k => { if(!data[k].length){ data[k] = fresh(s[k]); filled.push(LABEL[k]); } });
+    let dayFilled = 0;
+    if(!data.days.length){
+      const base = data.start || s.start;
+      data.days = s.days.map((d,i) => ({id:uid(), date:addDays(base,i), title:d.title, items:fresh(d.items)}));
+      dayFilled = data.days.length;
+    } else {
+      data.days.forEach((d,i) => { const sd = s.days[i]; if(sd && !d.items.length){ d.items = fresh(sd.items); if(!d.title) d.title = sd.title; dayFilled++; } });
+    }
+    if(dayFilled) filled.push(`${dayFilled} 天的行程`);
+    if(!filled.length){ toast("每個區塊都有資料了，不需要補 ✓"); return; }
+    activeDay = null; save(); render();
+    toast("已補上：" + filled.join("、"), () => { data = old; save(); render(); });
+  },
   "toggle-motion"(){ const off = !document.documentElement.classList.contains("no-motion"); setMotion(off); store.set("tripTemplate:noMotion", off ? "1" : ""); }
 };
 function downloadFile(text, name, type){
