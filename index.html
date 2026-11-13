@@ -902,12 +902,13 @@ function route(){
   render();
 }
 function go(id){
-  editing = false;
+  editing = false; activeDay = null;   // 每次從首頁進來都從 Day 1 開始
   history.pushState(null, "", id ? "?trip=" + encodeURIComponent(id) : location.pathname);
   route();
   scrollTo({top:0, behavior:"auto"});
 }
-addEventListener("popstate", () => { editing = false; route(); });
+// 用瀏覽器／手機的「上一頁、下一頁」回來時，回到當時看的那一天
+addEventListener("popstate", e => { editing = false; activeDay = e.state?.day || null; route(); });
 
 /* ---------- 渲染 ---------- */
 const HOME_ART = () => `<svg viewBox="0 0 360 200" role="img" aria-label="行李箱與飛機的插圖">
@@ -1065,7 +1066,7 @@ function renderDays(bounce){
   if(!data.days.length){ tabs.innerHTML=""; panel.innerHTML = `<div class="empty">還沒有行程${canEdit?"，按「＋ 新增一天」開始安排":""}</div>`; return; }
   if(!data.days.find(d => d.id === activeDay)){
     const today = addDays(null,0);
-    activeDay = (data.days.find(d => d.date === today) || data.days[0]).id;
+    activeDay = data.days[0].id;
   }
   tabs.innerHTML = data.days.map((d,i) => `
     <button class="day-tab ${d.id===activeDay?"on":""}" role="tab" aria-selected="${d.id===activeDay}" data-act="pick-day" data-id="${d.id}">
@@ -1421,7 +1422,8 @@ const ACTIONS = {
   "add-day"(){ const last = data.days.at(-1); openForm({title:"新增一天", fields:[{k:"date",label:"日期",type:"date",req:true},{k:"title",label:"這天的主題",ph:"例如：海邊放空日"}], values:{date:last?addDays(last.date,1):data.start}, onSave:v => { const d = {id:uid(),...v,items:[]}; data.days.push(d); activeDay = d.id; }}); },
   "edit-day"(id){ const d = data.days.find(x=>x.id===id); openForm({title:"編輯這一天", fields:[{k:"date",label:"日期",type:"date",req:true},{k:"title",label:"這天的主題"}], values:d, onSave:v => Object.assign(d,v)}); },
   "del-day"(id){ removeWithUndo(data.days, id, d => fmtDate(d.date) + " 的行程"); },
-  "pick-day"(id){ if(id === activeDay) return; activeDay = id; renderDays(motionOK()); },
+  "pick-day"(id){ if(id === activeDay) return; activeDay = id;
+    try{ history.replaceState({...(history.state || {}), day:id}, "", location.href); }catch(e){} renderDays(motionOK()); },
   "add-item"(){ const day = findDay(); const last = day.items.at(-1); let t = "";
     if(last?.endTime) t = last.endTime;
     else if(last?.time){ const [h,m] = last.time.split(":").map(Number); t = String(Math.min(h+1,23)).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
