@@ -39,7 +39,7 @@ window.TRIP_CONFIG = {
 };
 </script>
 
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='4' y='4' width='56' height='56' rx='16' fill='%23F6D27A' stroke='%233E3A39' stroke-width='4'/><path d='M14 38 L50 22 L44 30 L52 34 L46 36 L40 32 L28 40 Z' fill='%23fff' stroke='%233E3A39' stroke-width='3' stroke-linejoin='round'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='4' y='4' width='56' height='56' rx='16' fill='%23C9BDE8' stroke='%233E3A39' stroke-width='4'/><path d='M14 38 L50 22 L44 30 L52 34 L46 36 L40 32 L28 40 Z' fill='%23fff' stroke='%233E3A39' stroke-width='3' stroke-linejoin='round'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Huninn&display=swap" rel="stylesheet">
@@ -52,7 +52,9 @@ window.TRIP_CONFIG = {
   --paper:#FFFCF6;      /* 底色：和紙白 */
   --card:#FFFFFF;       /* 卡片底色 */
   --ink:#3E3A39;        /* 墨灰：線框與文字 */
-  --coral:#F2A497;      /* 珊瑚粉 */
+  --primary:#C9BDE8;    /* 主色：薰衣草紫（按鈕、選中狀態、標題列） */
+  --primary-deep:#8E7CC3; /* 主色深色版：鍵盤焦點框 */
+  --coral:#F2A497;      /* 珊瑚粉（刪除、提醒） */
   --yellow:#F6D27A;     /* 山吹黃 */
   --water:#A8D3E6;      /* 水色 */
   --bamboo:#B9DAA5;     /* 若竹綠 */
@@ -80,21 +82,21 @@ h1,h2,h3,h4{font-weight:normal;margin:0;line-height:1.3}
 .nav{position:fixed;inset:0 0 auto 0;z-index:50;background:var(--paper);border-bottom:var(--line) solid var(--ink);padding-top:env(safe-area-inset-top)}
 .nav-top{display:flex;align-items:center;gap:8px;max-width:760px;margin:0 auto;padding:8px 16px 4px}
 .brand{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-decoration:none}
-.brand-badge{width:34px;height:34px;flex:none;display:grid;place-items:center;background:var(--yellow);border:var(--line) solid var(--ink);border-radius:12px}
+.brand-badge{width:34px;height:34px;flex:none;display:grid;place-items:center;background:var(--primary);border:var(--line) solid var(--ink);border-radius:12px}
 .brand-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:17px}
 .nav-links{display:flex;gap:6px;overflow-x:auto;max-width:760px;margin:0 auto;padding:4px 16px 10px;scrollbar-width:none}
 .nav-links::-webkit-scrollbar{display:none}
 .nav-links a{flex:none;text-decoration:none;padding:4px 12px;border:2px solid var(--ink);border-radius:999px;font-size:14px;background:var(--card);transition:background .2s,transform .2s}
-.nav-links a.on{background:var(--yellow);transform:translateY(-1px)}
+.nav-links a.on{background:var(--primary);transform:translateY(-1px)}
 
 /* ---------- 按鈕 ---------- */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:var(--line) solid var(--ink);background:var(--card);border-radius:999px;padding:6px 14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink);transition:transform .12s,box-shadow .12s;white-space:nowrap;text-decoration:none;font-size:15px}
 .btn:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
 .btn.sm{padding:3px 10px;font-size:13px;border-width:2px;box-shadow:none}
-.btn.coral{background:var(--coral)}.btn.yellow{background:var(--yellow)}.btn.water{background:var(--water)}.btn.bamboo{background:var(--bamboo)}
+.btn.primary{background:var(--primary)}.btn.coral{background:var(--coral)}.btn.yellow{background:var(--yellow)}.btn.water{background:var(--water)}.btn.bamboo{background:var(--bamboo)}
 .btn.ghost{box-shadow:none;border-style:dashed;background:transparent;width:100%;padding:10px}
 .icon-btn{width:34px;height:34px;padding:0;border-width:2px;box-shadow:none;font-size:15px}
-:focus-visible{outline:3px solid var(--coral);outline-offset:2px}
+:focus-visible{outline:3px solid var(--primary-deep);outline-offset:2px}
 
 /* ---------- 區塊 ---------- */
 section{padding:28px 0 8px;scroll-margin-top:calc(var(--nav-h) + 8px)}
@@ -127,7 +129,7 @@ body.editing .edit-only.block{display:flex!important}
 .hero-sub{margin:0;color:var(--muted)}
 .hero-meta{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 .pill{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--ink);border-radius:999px;padding:4px 12px;font-size:14px;background:var(--paper)}
-.pill.yellow{background:var(--yellow)}.pill.coral{background:var(--coral)}
+.pill.yellow{background:var(--yellow)}.pill.coral{background:var(--coral)}.pill.primary{background:var(--primary)}
 
 /* ---------- 首頁：旅程卡片 ---------- */
 .home-head{background:var(--card);border:var(--line) solid var(--ink);border-radius:32px;box-shadow:var(--pop);overflow:hidden;text-align:center}
@@ -169,7 +171,7 @@ body.editing .edit-only.block{display:flex!important}
 .day-tab{flex:none;scroll-snap-align:start;border:var(--line) solid var(--ink);background:var(--card);border-radius:18px;padding:6px 12px;cursor:pointer;text-align:center;min-width:76px;box-shadow:2px 2px 0 var(--ink);transition:background .2s}
 .day-tab .d1{display:block;font-size:13px;color:var(--muted)}
 .day-tab .d2{display:block;font-size:17px}
-.day-tab.on{background:var(--coral)}
+.day-tab.on{background:var(--primary)}
 .day-tab.on .d1{color:var(--ink)}
 .day-tab.pop{animation:pop .45s cubic-bezier(.3,1.6,.5,1)}
 .day-head{display:flex;align-items:flex-start;gap:10px;margin:6px 0 14px}
@@ -188,7 +190,7 @@ body.editing .edit-only.block{display:flex!important}
 .tl-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .tl-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
-.tag.coral{background:var(--coral)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
+.tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
 .map-link{display:inline-flex;align-items:center;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:999px;padding:0 10px;line-height:1.7;background:var(--paper)}
 .map-link:hover{background:var(--water)}
 
@@ -203,7 +205,7 @@ body.editing .edit-only.block{display:flex!important}
 
 /* ---------- 清單 ---------- */
 .progress{height:16px;border:var(--line) solid var(--ink);border-radius:999px;background:var(--paper);overflow:hidden;margin:2px 0 12px}
-.progress span{display:block;height:100%;background:var(--bamboo);border-right:var(--line) solid var(--ink);transition:width .4s cubic-bezier(.3,1.4,.5,1)}
+.progress span{display:block;height:100%;background:var(--primary);border-right:var(--line) solid var(--ink);transition:width .4s cubic-bezier(.3,1.4,.5,1)}
 .progress span[style*="width: 0%"],.progress span[style*="width:0%"]{border-right:0}
 .checklist{list-style:none;margin:0;padding:0}
 .check{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:2px dashed #E7E1D8}
@@ -211,7 +213,7 @@ body.editing .edit-only.block{display:flex!important}
 .check label{display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;min-width:0}
 .check input{appearance:none;-webkit-appearance:none;width:26px;height:26px;flex:none;margin:0;border:var(--line) solid var(--ink);border-radius:9px;background:var(--card);cursor:pointer;display:grid;place-items:center;transition:background .2s}
 .check input::after{content:"";width:10px;height:5px;border-left:3px solid var(--ink);border-bottom:3px solid var(--ink);transform:rotate(-45deg) scale(0);margin-top:-3px;transition:transform .25s cubic-bezier(.3,1.8,.5,1)}
-.check input:checked{background:var(--bamboo)}
+.check input:checked{background:var(--primary)}
 .check input:checked::after{transform:rotate(-45deg) scale(1)}
 .check input:checked + span{text-decoration:line-through;text-decoration-thickness:2px;color:var(--muted)}
 .check span{word-break:break-word}
@@ -232,7 +234,7 @@ footer{text-align:center;padding:30px 0 50px;color:var(--muted);font-size:13px}
 dialog{border:var(--line) solid var(--ink);border-radius:var(--radius);background:var(--paper);padding:0;width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 40px);box-shadow:var(--pop);color:var(--ink)}
 dialog::backdrop{background:rgba(62,58,57,.35)}
 dialog[open]{animation:sheetIn .35s cubic-bezier(.3,1.4,.5,1)}
-.dlg-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:var(--line) solid var(--ink);background:var(--yellow);position:sticky;top:0;z-index:1}
+.dlg-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:var(--line) solid var(--ink);background:var(--primary);position:sticky;top:0;z-index:1}
 .dlg-head h3{flex:1;font-size:18px}
 .dlg-body{padding:14px 16px;display:grid;gap:12px}
 .field{display:grid;gap:4px}
@@ -315,7 +317,7 @@ html.no-motion{scroll-behavior:auto}
     </a>
     <span class="pill hidden" id="syncPill" style="font-size:12px;padding:2px 8px" aria-live="polite"></span>
     <button class="btn sm yellow" data-act="share" id="navShare">🔗 分享</button>
-    <button class="btn sm coral" data-act="toggle-edit" id="editToggle">✏️ 編輯</button>
+    <button class="btn sm primary" data-act="toggle-edit" id="editToggle">✏️ 編輯</button>
   </div>
   <nav class="nav-links" id="navLinks" aria-label="頁面選單">
     <a href="#cover">📖 封面</a>
@@ -339,12 +341,12 @@ html.no-motion{scroll-behavior:auto}
         <div class="hero-body">
           <h1>我的旅遊手帳</h1>
           <p class="hero-sub">收藏每一趟旅程 ✿ 點卡片看詳細行程</p>
-          <div class="hero-meta owner-only-block"><button class="btn coral" data-act="new-trip">＋ 建立新旅程</button></div>
+          <div class="hero-meta owner-only-block"><button class="btn primary" data-act="new-trip">＋ 建立新旅程</button></div>
         </div>
       </div>
     </section>
     <section id="upcoming">
-      <div class="sec-title"><span class="chip-ico" style="background:var(--coral)">🧳</span><h2>行程總覽</h2></div>
+      <div class="sec-title"><span class="chip-ico" style="background:var(--primary)">🧳</span><h2>行程總覽</h2></div>
       <div class="trip-grid" id="upcomingGrid"></div>
     </section>
     <section id="past" class="hidden">
@@ -383,7 +385,7 @@ html.no-motion{scroll-behavior:auto}
   <!-- 每日行程 -->
   <section id="plan">
     <div class="sec-title">
-      <span class="chip-ico" style="background:var(--coral)">🗓️</span><h2>每日行程</h2>
+      <span class="chip-ico" style="background:var(--primary)">🗓️</span><h2>每日行程</h2>
       <span class="spacer"></span>
       <button class="btn sm edit-only" data-act="add-day">＋ 新增一天</button>
     </div>
@@ -558,7 +560,7 @@ const TRANSPORT = {
   bike:       {label:"單車",   icon:"🚲", color:"bamboo"},
   train:      {label:"電車",   icon:"🚃", color:"water"},
   subway:     {label:"地鐵",   icon:"🚇", color:"water"},
-  shinkansen: {label:"高鐵/新幹線", icon:"🚄", color:"water"},
+  shinkansen: {label:"高鐵/新幹線", icon:"🚄", color:"primary"},
   boat:       {label:"船",     icon:"⛴️", color:"water"},
   bus:        {label:"巴士",   icon:"🚌", color:"yellow"},
   taxi:       {label:"計程車", icon:"🚕", color:"yellow"},
@@ -595,7 +597,7 @@ japan: () => `<svg viewBox="0 0 360 220" role="img" aria-label="富士山、鳥�
   <line x1="0" y1="208" x2="360" y2="208" ${S}/>
   <g class="a-ride">
     <path d="M128 182 H240 Q284 182 300 205 H128 Z" fill="#fff" ${S}/>
-    <line x1="130" y1="198" x2="296" y2="198" stroke="#A8D3E6" stroke-width="5"/>
+    <line x1="130" y1="198" x2="296" y2="198" stroke="#C9BDE8" stroke-width="5"/>
     <path d="M250 186 Q270 187 280 196 H250 Z" fill="#A8D3E6" ${S} stroke-width="2.5"/>
     ${[140,165,190,215].map(x=>`<rect x="${x}" y="187" width="16" height="7" rx="3" fill="#A8D3E6" ${S} stroke-width="2.5"/>`).join("")}
   </g>
@@ -609,7 +611,7 @@ island: () => `<svg viewBox="0 0 360 220" role="img" aria-label="椰子樹、帆
     <path d="M118 150 H178 L170 164 H126 Z" fill="#F2A497" ${S}/>
     <path d="M146 150 V96" ${S}/>
     <path d="M149 100 L176 144 H149 Z" fill="#fff" ${S}/>
-    <path d="M143 106 L124 144 H143 Z" fill="#F6D27A" ${S}/>
+    <path d="M143 106 L124 144 H143 Z" fill="#C9BDE8" ${S}/>
   </g>
   <svg x="0" y="150" width="360" height="70" viewBox="0 0 360 70" overflow="hidden">
     <g class="a-wave"><path d="M-40 10 ${Array.from({length:12}).map(()=>"q10 -8 20 0 t20 0").join(" ")} V70 H-40 Z" fill="#A8D3E6" ${S}/></g>
@@ -635,7 +637,7 @@ city: () => `<svg viewBox="0 0 360 220" role="img" aria-label="摩天輪、高�
     <g class="a-spin-slow">
       <circle r="52" fill="none" ${S}/>
       ${[0,45,90,135].map(a=>`<line x1="-52" y1="0" x2="52" y2="0" ${S} stroke-width="2" transform="rotate(${a})"/>`).join("")}
-      ${[0,60,120,180,240,300].map((a,i)=>`<circle cx="${(52*Math.cos(a*Math.PI/180)).toFixed(1)}" cy="${(52*Math.sin(a*Math.PI/180)).toFixed(1)}" r="8" fill="${["#F2A497","#F6D27A","#A8D3E6"][i%3]}" ${S}/>`).join("")}
+      ${[0,60,120,180,240,300].map((a,i)=>`<circle cx="${(52*Math.cos(a*Math.PI/180)).toFixed(1)}" cy="${(52*Math.sin(a*Math.PI/180)).toFixed(1)}" r="8" fill="${["#C9BDE8","#F6D27A","#A8D3E6"][i%3]}" ${S}/>`).join("")}
     </g>
     <circle r="6" fill="#fff" ${S}/>
   </g>
@@ -644,7 +646,7 @@ city: () => `<svg viewBox="0 0 360 220" role="img" aria-label="摩天輪、高�
   <line x1="248" y1="52" x2="248" y2="34" ${S}/><circle class="a-blink" cx="248" cy="32" r="3" fill="#F6D27A" ${S} stroke-width="2"/>
   <rect x="150" y="110" width="44" height="76" rx="6" fill="#A8D3E6" ${S}/>
   <rect x="196" y="134" width="30" height="52" rx="6" fill="#B9DAA5" ${S}/>
-  <rect x="272" y="124" width="40" height="62" rx="6" fill="#F6D27A" ${S}/>
+  <rect x="272" y="124" width="40" height="62" rx="6" fill="#C9BDE8" ${S}/>
   <rect x="314" y="146" width="36" height="40" rx="6" fill="#A8D3E6" ${S}/>
   ${[[160,122],[176,122],[160,142],[176,142],[160,162],[176,162],[282,136],[296,136],[282,156],[296,156]].map(([x,y])=>`<rect x="${x}" y="${y}" width="8" height="10" rx="2" fill="#fff" ${S} stroke-width="2"/>`).join("")}
   <path d="M0 186 H360 V220 H0 Z" fill="#B9DAA5" ${S}/>
@@ -831,7 +833,7 @@ const HOME_ART = () => `<svg viewBox="0 0 360 200" role="img" aria-label="行李
   <path d="M0 176 Q90 160 180 172 T360 168 V200 H0 Z" fill="#B9DAA5" ${S}/>
   <g class="a-float d2s">
     <path d="M160 96 V82 Q160 74 168 74 H192 Q200 74 200 82 V96" fill="none" ${S} stroke-width="5"/>
-    <rect x="128" y="94" width="104" height="76" rx="16" fill="#F2A497" ${S}/>
+    <rect x="128" y="94" width="104" height="76" rx="16" fill="#C9BDE8" ${S}/>
     <line x1="156" y1="96" x2="156" y2="168" stroke="#F6D27A" stroke-width="7"/>
     <line x1="204" y1="96" x2="204" y2="168" stroke="#F6D27A" stroke-width="7"/>
     <rect x="128" y="94" width="104" height="76" rx="16" fill="none" ${S}/>
@@ -850,9 +852,9 @@ const HOME_ART = () => `<svg viewBox="0 0 360 200" role="img" aria-label="行李
 function tripStatus(d){
   if(!d.start) return {txt:"📅 日期未定", cls:"", past:false};
   const t = todayStr(), left = dayDiff(t, d.start), end = d.end || d.start;
-  if(left > 0) return {txt:`⏳ 再 ${left} 天出發！`, cls:"coral", past:false};
-  if(left === 0) return {txt:"🎉 今天出發！", cls:"coral", past:false};
-  if(dayDiff(t, end) >= 0) return {txt:`🎒 旅行中・第 ${1-left} 天`, cls:"coral", past:false};
+  if(left > 0) return {txt:`⏳ 再 ${left} 天出發！`, cls:"primary", past:false};
+  if(left === 0) return {txt:"🎉 今天出發！", cls:"primary", past:false};
+  if(dayDiff(t, end) >= 0) return {txt:`🎒 旅行中・第 ${1-left} 天`, cls:"primary", past:false};
   return {txt:"📷 旅程結束，留下好回憶", cls:"", past:true};
 }
 function dateRange(d){
@@ -943,7 +945,7 @@ function tools(type, id){
 function renderFlights(){
   const el = $("#flightList");
   if(!data.flights.length){ el.innerHTML = `<div class="empty">還沒有航班資料${canEdit?"，按「✏️ 編輯」來新增":""}</div>`; return; }
-  const colors = ["var(--coral)","var(--water)","var(--yellow)","var(--bamboo)"];
+  const colors = ["var(--primary)","var(--water)","var(--yellow)","var(--bamboo)"];
   el.innerHTML = data.flights.map((f,i) => `
     <article class="card flight">
       ${tools("flight", f.id)}
@@ -1084,7 +1086,7 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   dlg.innerHTML = `<form method="dialog" id="dlgForm">
     <div class="dlg-head"><h3>${esc(title)}</h3><button type="button" class="btn icon-btn" data-close aria-label="關閉">✕</button></div>
     <div class="dlg-body">${body}</div>
-    <div class="dlg-foot"><button type="button" class="btn" data-close>取消</button><button class="btn coral" type="submit">${esc(saveText)}</button></div>
+    <div class="dlg-foot"><button type="button" class="btn" data-close>取消</button><button class="btn primary" type="submit">${esc(saveText)}</button></div>
   </form>`;
   const form = $("#dlgForm");
   form.addEventListener("submit", e => {
@@ -1215,7 +1217,7 @@ const ACTIONS = {
         <p style="margin:0">${data ? "分享的是「" + esc(data.title) + "」這一趟。" : "分享的是旅程總覽，朋友可以點進每一趟。"}${CLOUD ? "朋友打開就能看，不用登入；你改了行程，他們的畫面會自動更新。" : "目前是單機模式，行程只存在這台裝置。連接 Firebase 之後，朋友才看得到你修改的內容。"}</p>
         <div class="share-box">${esc(url)}</div>
       </div>
-      <div class="dlg-foot">${navigator.share ? `<button class="btn water" id="nativeShare">📤 分享到…</button>` : ""}<button class="btn coral" id="copyLink">📋 複製網址</button></div>`;
+      <div class="dlg-foot">${navigator.share ? `<button class="btn water" id="nativeShare">📤 分享到…</button>` : ""}<button class="btn primary" id="copyLink">📋 複製網址</button></div>`;
     $$("[data-close]", dlg).forEach(b => b.onclick = () => dlg.close());
     $("#copyLink").onclick = async () => { try{ await navigator.clipboard.writeText(url); toast("已複製網址 ✓"); }catch(e){ const r=document.createRange(); r.selectNodeContents($(".share-box",dlg)); getSelection().removeAllRanges(); getSelection().addRange(r); toast("請手動複製選取的網址"); } };
     const ns = $("#nativeShare"); if(ns) ns.onclick = () => navigator.share({title:shareTitle, text:data ? `${data.title}｜${data.dest}` : shareTitle, url}).catch(()=>{});
