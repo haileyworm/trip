@@ -1097,7 +1097,11 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   dlg.showModal();
   const first = $("input,select,textarea", form); if(first && window.innerWidth > 520) first.focus();
 }
-dlg.addEventListener("click", e => { if(e.target === dlg) dlg.close(); });
+/* 只有「在背景按下、也在背景放開」才關閉；在輸入框裡拖曳選字不會誤關 */
+const outsideDlg = e => { const r = dlg.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+let downOnBackdrop = false;
+dlg.addEventListener("pointerdown", e => { downOnBackdrop = e.target === dlg && outsideDlg(e); });
+dlg.addEventListener("click", e => { if(downOnBackdrop && e.target === dlg && outsideDlg(e)) dlg.close(); downOnBackdrop = false; });
 
 const FLIGHT_FIELDS = [
   [{k:"label",label:"標籤",ph:"去程／回程／轉機",def:"去程"},{k:"date",label:"日期",type:"date"}],
