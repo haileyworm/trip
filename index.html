@@ -136,6 +136,10 @@ body.editing .edit-only.block{display:flex!important}
 .home-head h1{font-size:clamp(28px,8vw,38px);margin:0 0 4px}
 .trip-grid{display:grid;grid-template-columns:1fr;gap:18px}
 @media (min-width:600px){.trip-grid{grid-template-columns:1fr 1fr}}
+.tc-wrap{position:relative;display:flex;animation:bounceIn .6s cubic-bezier(.3,1.5,.5,1) both}
+.tc-wrap > .trip-card{flex:1;animation:none}
+.tc-copy{position:absolute;top:10px;right:10px;z-index:2;background:var(--card)}
+.tc-copy:hover{background:var(--primary)}
 .trip-card{display:flex;flex-direction:column;text-decoration:none;color:inherit;background:var(--card);border:var(--line) solid var(--ink);border-radius:var(--radius);box-shadow:var(--pop);overflow:hidden;transition:transform .18s,box-shadow .18s;animation:bounceIn .6s cubic-bezier(.3,1.5,.5,1) both}
 .trip-card:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
 .trip-card:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
@@ -899,7 +903,7 @@ function render(){
 function tripCard(id, d, i){
   const st = tripStatus(d);
   const art = (ART[d.theme] || ART.japan)().replace("<svg ", '<svg preserveAspectRatio="xMidYMid slice" ').replace(/role="img" aria-label="[^"]*"/, 'aria-hidden="true"');
-  return `<a class="trip-card ${st.past ? "past" : ""}" href="?trip=${encodeURIComponent(id)}" data-act="open-trip" data-id="${esc(id)}" style="animation-delay:${i*80}ms">
+  return `<div class="tc-wrap" style="animation-delay:${i*80}ms"><a class="trip-card ${st.past ? "past" : ""}" href="?trip=${encodeURIComponent(id)}" data-act="open-trip" data-id="${esc(id)}">
     <div class="tc-art">${art}</div>
     <div class="tc-body">
       <div class="tc-top"><span class="hero-dest">📍 ${esc(d.dest || "目的地")}</span><span class="pill ${st.cls}">${esc(st.txt)}</span></div>
@@ -907,19 +911,21 @@ function tripCard(id, d, i){
       ${d.subtitle ? `<p class="tc-sub">${esc(d.subtitle)}</p>` : ""}
       <div class="tc-date">🗓️ ${esc(dateRange(d) || "日期未定")}</div>
     </div>
-  </a>`;
+  </a>${canEdit ? `<button class="btn sm tc-copy" data-act="dup-trip" data-id="${esc(id)}" aria-label="複製「${esc(d.title)}」">📄 複製</button>` : ""}</div>`;
 }
 function renderHome(){
   $("#homeArt").innerHTML = HOME_ART();
   const list = Object.entries(trips).map(([id,d]) => ({id, d, st:tripStatus(d)}));
-  // 全部旅程依出發日期降冪（新 → 舊），日期未定的排最前面
-  const up = list.sort((a,b) => (b.d.start||"9999").localeCompare(a.d.start||"9999"));
-  const past = [];
+  // 兩區都依出發日期降冪（新 → 舊），日期未定的排最前面
+  const byStartDesc = (a,b) => (b.d.start||"9999").localeCompare(a.d.start||"9999");
+  const up = list.filter(x => !x.st.past).sort(byStartDesc);     // 進行中、還沒出發
+  const past = list.filter(x => x.st.past).sort(byStartDesc);    // 已結束
   const newCard = canEdit ? `<button class="new-card" data-act="new-trip"><b>＋</b>建立新旅程</button>` : "";
   $("#upcomingGrid").innerHTML = up.map((x,i) => tripCard(x.id, x.d, i)).join("")
-    + (up.length ? newCard : (listLoaded ? `<div class="empty">${canEdit ? "還沒有旅程，建立第一趟吧" : "還沒有旅程，敬請期待 ✿"}</div>${newCard}` : ""));
-  $("#pastGrid").innerHTML = past.map((x,i) => tripCard(x.id, x.d, i)).join("");
-  $("#past").classList.toggle("hidden", !past.length);
+    + (up.length ? newCard : (listLoaded ? `<div class="empty">${canEdit ? "還沒有要出發的旅程，建立一趟吧" : "還沒有要出發的旅程，敬請期待 ✿"}</div>${newCard}` : ""));
+  $("#pastGrid").innerHTML = past.length ? past.map((x,i) => tripCard(x.id, x.d, i)).join("")
+    : (listLoaded ? `<div class="empty">還沒有去過的旅程，旅程結束後會自動移到這裡</div>` : "");
+  $("#past").classList.remove("hidden");
 }
 
 function renderHero(){
@@ -1154,6 +1160,28 @@ function removeWithUndo(arr, id, label){
 }
 
 
+/* 依旅程的出發日～回程日調整每日行程：
+   第 1 天對到出發日、依序往後排，天數不夠就補空白的天，
+   多出來的空白天刪掉；多出來但已經排了行程的天會保留在最後，不會被刪 */
+function syncDays(d){
+  if(!d.start || !d.end) return "";
+  const n = dayDiff(d.start, d.end) + 1;
+  if(n < 1 || n > 60) return "";
+  d.days.sort((a,b) => (a.date||"").localeCompare(b.date||""));
+  const before = d.days.map(x => x.date).join();
+  d.days.slice(0, n).forEach((day,i) => { day.date = addDays(d.start, i); });
+  while(d.days.length < n) d.days.push({id:uid(), date:addDays(d.start, d.days.length), title:"", items:[]});
+  let kept = 0;
+  if(d.days.length > n){
+    const extra = d.days.slice(n).filter(x => x.items.length);
+    extra.forEach((x,i) => { x.date = addDays(d.end, i+1); });
+    d.days = d.days.slice(0, n).concat(extra);
+    kept = extra.length;
+  }
+  if(kept) return `每日行程已改成 ${n} 天；另有 ${kept} 天已排了行程、超出新日期，先留在最後，不需要可以自己刪除`;
+  return d.days.map(x => x.date).join() !== before ? `每日行程已依日期更新為 ${n} 天 ✓` : "";
+}
+
 /* ---------- 動作 ---------- */
 const findDay = () => data.days.find(d => d.id === activeDay);
 const inAppBrowser = /Line\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
@@ -1169,8 +1197,14 @@ const ACTIONS = {
       toast("旅程建立好了，開始安排吧 ✿");
     }});
   },
+  "dup-trip"(id){
+    const src = trips[id]; if(!src) return;
+    const d = clone(src); d.title = (d.title || "我的旅行") + "（複製）";
+    const nid = newTripId(); writeTrip(nid, d, true); render();
+    toast(`已複製成「${d.title}」`, () => { removeTrip(nid); render(); });
+  },
   "copy-trip"(){
-    const d = clone(data); d.title = (d.title || "我的旅行") + "（副本）";
+    const d = clone(data); d.title = (d.title || "我的旅行") + "（複製）";
     const id = newTripId(); writeTrip(id, d, true); go(id); editing = true;
     toast("已複製成新旅程，記得改日期和名稱");
   },
@@ -1187,9 +1221,8 @@ const ACTIONS = {
   "toggle-edit"(){ if(!canEdit) return; editing = !editing; render(); toast(editing ? "編輯模式：點 ✏️ 修改、🗑️ 刪除" : (CLOUD ? "已同步給所有人 ✓" : "已儲存 ✓")); },
   "edit-trip"(){ openForm({title:"旅程資訊", fields:TRIP_FIELDS, values:data, onSave:v => {
     Object.assign(data, v);
-    if(v.start && v.end && dayDiff(v.start, v.end) >= 0 && data.days.every(d => !d.items.length)){
-      data.days = Array.from({length:Math.min(dayDiff(v.start,v.end)+1,60)}, (_,i) => ({id:uid(),date:addDays(v.start,i),title:"",items:[]}));
-    }
+    const msg = syncDays(data);
+    if(msg) toast(msg);
   }}); },
   "add-flight"(){ const last = data.flights.at(-1); openForm({title:"新增航班", fields:FLIGHT_FIELDS, values:{label:data.flights.length?"回程":"去程", date:data.flights.length?data.end:data.start, from:last?.to||"", fromCity:last?.toCity||"", to:last?.from||"", toCity:last?.fromCity||"", airline:last?.airline||""}, onSave:v => data.flights.push({id:uid(),...v})}); },
   "edit-flight"(id){ const f = data.flights.find(x=>x.id===id); openForm({title:"編輯航班", fields:FLIGHT_FIELDS, values:f, onSave:v => Object.assign(f,v)}); },
