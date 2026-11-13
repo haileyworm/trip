@@ -339,7 +339,7 @@ html.no-motion{scroll-behavior:auto}
         <div class="hero-body">
           <h1>我的旅遊手帳</h1>
           <p class="hero-sub">收藏每一趟旅程 ✿ 點卡片看詳細行程</p>
-          <div class="hero-meta owner-only-block"><button class="btn coral" data-act="new-trip">＋ 建立新旅程</button></div>
+          <div class="hero-meta owner-only-block"><button class="btn coral" data-act="new-trip">＋ 建立新旅程</button><button class="btn yellow hidden" data-act="add-sample" id="addSampleBtn">🗼 加回範例行程</button></div>
         </div>
       </div>
     </section>
@@ -744,6 +744,18 @@ async function removeTrip(id){
   delete trips[id]; persist();
   if(CLOUD && fb){ try{ await fb.deleteDoc(fb.doc(fb.db, "trips", id)); }catch(err){ console.error(err); toast("刪除失敗：" + (err.code || "")); } }
 }
+/* 範例行程：雲端還沒有任何旅程時，管理者登入後自動放一份 */
+const SAMPLE_ID = "sample-tokyo";
+let seeded = false, cloudEmpty = false;
+/* 雲端是空的（或連不上）時，先顯示檔案內建的行程，沒登入的人也看得到 */
+function fallbackTrips(){ return {[SAMPLE_ID]: trips[SAMPLE_ID] || normalize(clone(SAMPLE))}; }
+function maybeSeed(){
+  if(seeded || !CLOUD || !fb || !canEdit || !cloudEmpty) return;
+  seeded = true; cloudEmpty = false;
+  writeTrip(SAMPLE_ID, trips[SAMPLE_ID] || normalize(clone(SAMPLE)), true);
+  toast("已把「" + (trips[SAMPLE_ID]?.title || "東京小旅行") + "」存進雲端 ✓");
+  route();
+}
 function saveChecks(){ if(currentId) store.set(CHECK_KEY(currentId), JSON.stringify(checks)); }
 
 const SDK = "https://www.gstatic.com/firebasejs/12.18.0/";
@@ -767,14 +779,16 @@ async function initCloud(){
         if(j === lastJson[id] && trips[id]){ next[id] = trips[id]; return; }
         try{ next[id] = normalize(JSON.parse(j)); lastJson[id] = j; changed = true; }catch(e){ console.error(e); }
       });
+      cloudEmpty = snap.empty;
+      if(cloudEmpty){ Object.assign(next, fallbackTrips()); changed = true; }
       if(Object.keys(next).length !== Object.keys(trips).length) changed = true;
       listLoaded = true;
       if(!changed) return;
-      trips = next; persist(); route();
+      trips = next; persist(); route(); maybeSeed();
     }, err => {
       console.error(err);
       $("#loadingBanner").classList.add("hidden");
-      listLoaded = true; route();
+      listLoaded = true; if(!Object.keys(trips).length) trips = fallbackTrips(); route();
       toast(err.code === "permission-denied" ? "讀取被拒：請確認 Firestore 規則已發布" : "連不上雲端，先顯示上次的內容");
     });
 
@@ -785,14 +799,14 @@ async function initCloud(){
       if(!canEdit) editing = false;
       if(u && !canEdit) toast(`${u.email} 沒有編輯權限`);
       setSync(canEdit ? (syncState || "saved") : "");
-      render();
+      render(); maybeSeed();
     });
     addEventListener("offline", () => canEdit && setSync("offline"));
     addEventListener("online", () => canEdit && setSync("saved"));
   }catch(err){
     console.error(err);
     $("#loadingBanner").classList.add("hidden");
-    listLoaded = true; route();
+    listLoaded = true; if(!Object.keys(trips).length) trips = fallbackTrips(); route();
     toast("Firebase 載入失敗，請檢查設定");
   }
 }
@@ -909,6 +923,7 @@ function tripCard(id, d, i){
 }
 function renderHome(){
   $("#homeArt").innerHTML = HOME_ART();
+  $("#addSampleBtn").classList.toggle("hidden", !canEdit || !!trips[SAMPLE_ID] || !listLoaded);
   const list = Object.entries(trips).map(([id,d]) => ({id, d, st:tripStatus(d)}));
   const up = list.filter(x => !x.st.past).sort((a,b) => (a.d.start||"9").localeCompare(b.d.start||"9"));
   const past = list.filter(x => x.st.past).sort((a,b) => (b.d.start||"").localeCompare(a.d.start||""));
@@ -1152,6 +1167,7 @@ const findDay = () => data.days.find(d => d.id === activeDay);
 const inAppBrowser = /Line\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
 const ACTIONS = {
   "go-home"(){ go(null); },
+  "add-sample"(){ writeTrip(SAMPLE_ID, normalize(clone(SAMPLE)), true); render(); toast("已加回東京範例行程 ✓"); },
   "open-trip"(id){ go(id); },
   "new-trip"(){
     const t = addDays(null, 30);
