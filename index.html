@@ -193,6 +193,24 @@ body.editing .edit-only.block{display:flex!important}
 .tl-note{margin:2px 0 0;font-size:14px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
 .tl-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .tl-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tl-time .tl-end{display:block;color:var(--muted);font-size:12px;line-height:1.25}
+.tl-time .tl-end::before{content:"│";display:block;font-size:10px;line-height:1;padding-right:14px;color:var(--muted)}
+.tag.dur{background:var(--paper);color:var(--ink)}
+.tl-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.tl-imgs button{padding:0;border:2px solid var(--ink);border-radius:12px;overflow:hidden;width:76px;height:76px;background:var(--paper);cursor:zoom-in;flex:none}
+.tl-imgs img,.img-prev img{width:100%;height:100%;object-fit:cover;display:block}
+.img-drop{border:2px dashed var(--ink);border-radius:14px;padding:12px;text-align:center;font-size:14px;color:var(--muted);background:var(--card);display:grid;gap:8px;justify-items:center}
+.img-drop.over{background:var(--primary);color:var(--ink)}
+.img-previews{display:flex;flex-wrap:wrap;gap:8px}
+.img-previews:empty{display:none}
+.img-prev{position:relative;width:76px;height:76px;border:2px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--paper)}
+.img-prev button{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:2px solid var(--ink);background:var(--card);font-size:12px;padding:0;cursor:pointer;line-height:1}
+.time-wrap{display:flex;gap:6px;align-items:center}
+.time-wrap input{flex:1;min-width:0}
+dialog#lb{background:transparent;border:0;box-shadow:none;padding:0;width:auto;max-width:96vw;max-height:94dvh;margin:auto;border-radius:0;overflow:visible}
+dialog#lb::backdrop{background:rgba(62,58,57,.75)}
+dialog#lb img{display:block;max-width:96vw;max-height:88dvh;border:var(--line) solid var(--ink);border-radius:var(--radius-sm);background:var(--card);cursor:zoom-out}
+dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
 .tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
 .map-link{display:inline-flex;align-items:center;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:999px;padding:0 10px;line-height:1.7;background:var(--paper)}
@@ -460,6 +478,7 @@ html.no-motion{scroll-behavior:auto}
 <footer>做一本屬於自己的旅遊手帳 ✿ 祝旅途愉快</footer>
 
 <dialog id="dlg"></dialog>
+<dialog id="lb" aria-label="放大圖片"></dialog>
 
 <!-- =========================================================
      📦 預設行程（雲端還沒有資料時，管理者第一次登入會把這份上傳）
@@ -762,6 +781,7 @@ async function initCloud(){
     const db = fsM.getFirestore(app);
     const auth = authM.getAuth(app);
     fb = {...fsM, ...authM, auth, db};
+    hydrateImgs();
 
     fsM.onSnapshot(fsM.collection(db, "trips"), snap => {
       $("#loadingBanner").classList.add("hidden");
@@ -801,6 +821,60 @@ async function initCloud(){
     listLoaded = true; route();
     toast("Firebase 載入失敗，請檢查設定");
   }
+}
+
+/* ---------- 圖片：每張圖存成獨立一筆資料（雲端 tripImages／單機 localStorage） ---------- */
+const imgCache = {};
+async function getImg(id){
+  if(imgCache[id]) return imgCache[id];
+  if(!CLOUD){ const v = store.get("tripImg:" + id); if(v) imgCache[id] = v; return v; }
+  if(!fb) return null;
+  try{ const snap = await fb.getDoc(fb.doc(fb.db, "tripImages", id)); const v = snap.exists() ? snap.data().src : null; if(v) imgCache[id] = v; return v; }
+  catch(e){ console.error(e); return null; }
+}
+async function putImg(id, src){
+  if(!CLOUD){
+    try{ localStorage.setItem("tripImg:" + id, src); }catch(e){ throw new Error("這台裝置的儲存空間滿了，圖片存不下"); }
+    imgCache[id] = src; return;
+  }
+  if(!fb || !canEdit) throw new Error("請先登入再上傳圖片");
+  await fb.setDoc(fb.doc(fb.db, "tripImages", id), {src, createdAt: fb.serverTimestamp(), by: user?.email || ""});
+  imgCache[id] = src;
+}
+function hydrateImgs(root){
+  $$("img[data-img]", root || document).forEach(async img => {
+    if(img.getAttribute("src")) return;
+    const v = await getImg(img.dataset.img);
+    if(v) img.src = v; else if(CLOUD && !fb) return; else img.alt = "圖片載入失敗";
+  });
+}
+/* 壓縮圖片：最長邊 1600px、JPEG，確保每張小於 Firestore 單筆上限 */
+function compressImage(file, max = 1600){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      let scale = Math.min(1, max / Math.max(im.width, im.height)), q = 0.82, out = "";
+      for(let i = 0; i < 8; i++){
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(im.width * scale)); c.height = Math.max(1, Math.round(im.height * scale));
+        const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(im, 0, 0, c.width, c.height);
+        out = c.toDataURL("image/jpeg", q);
+        if(out.length < 900000) return resolve(out);
+        if(q > 0.6) q -= 0.1; else scale *= 0.8;
+      }
+      resolve(out);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("讀不到這張圖片")); };
+    im.src = url;
+  });
+}
+function durText(a, b){
+  if(!a || !b) return "";
+  const m = t => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; };
+  let d = m(b) - m(a); if(d < 0) d += 1440; if(!d) return "";
+  const h = Math.floor(d / 60), r = d % 60;
+  return (h ? h + " 小時" : "") + (h && r ? " " : "") + (r ? r + " 分" : "");
 }
 
 /* ---------- 頁面切換：沒有 ?trip= 是首頁，有就是那趟旅程 ---------- */
@@ -993,13 +1067,16 @@ function renderDays(bounce){
   const items = day.items.map(it => {
     const tr = TRANSPORT[it.transport] || TRANSPORT[""];
     const q = it.place || it.title;
+    const dur = durText(it.time, it.endTime);
+    const imgs = (it.images || []).length ? `<div class="tl-imgs">${it.images.map((id,n) => `<button type="button" data-act="view-img" data-id="${esc(id)}" aria-label="放大第 ${n+1} 張圖片"><img data-img="${esc(id)}" alt="截圖 ${n+1}"></button>`).join("")}</div>` : "";
     return `<li class="tl-item">
-      <div class="tl-time">${esc(it.time || "")}</div>
+      <div class="tl-time">${esc(it.time || "")}${it.endTime ? `<span class="tl-end">${esc(it.endTime)}</span>` : ""}</div>
       <div class="tl-dot" style="background:${tr.color?`var(--${tr.color})`:"var(--yellow)"}"></div>
       <div class="tl-card">
-        <div class="tl-row">${tr.label && it.transport ? `<span class="tag ${tr.color}">${tr.icon} ${esc(tr.label)}</span>` : ""}</div>
+        <div class="tl-row">${tr.label && it.transport ? `<span class="tag ${tr.color}">${tr.icon} ${esc(tr.label)}</span>` : ""}${dur ? `<span class="tag dur">⏱ ${dur}</span>` : ""}</div>
         <h4>${esc(it.title || "（未命名）")}</h4>
         ${it.note ? `<p class="tl-note">${esc(it.note)}</p>` : ""}
+        ${imgs}
         <div class="tl-actions">
           ${q ? `<a class="map-link" href="${mapUrl(q)}" target="_blank" rel="noopener">📍 ${esc(it.place || "Google 地圖")}</a>` : ""}
           <button class="btn sm edit-only" data-act="edit-item" data-id="${it.id}">✏️ 編輯</button>
@@ -1016,6 +1093,7 @@ function renderDays(bounce){
     </div>
     ${day.items.length ? `<ol class="timeline ${bounce?"bounce":""}">${items}</ol>` : `<div class="empty">這天還沒有安排${canEdit?"，按下方按鈕新增":""}</div>`}
     <button class="btn ghost edit-only" data-act="add-item">＋ 新增行程</button>`;
+  hydrateImgs(panel);
   if(bounce){
     $$(".timeline.bounce > li", panel).forEach((li,i) => li.style.animationDelay = (i*70)+"ms");
     const tab = $(`.day-tab[data-id="${activeDay}"]`);
@@ -1084,6 +1162,14 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     let input;
     if(fd.type === "select") input = `<select name="${fd.k}">${Object.entries(fd.options).map(([k,l])=>`<option value="${esc(k)}" ${k===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
     else if(fd.type === "textarea") input = `<textarea name="${fd.k}" placeholder="${esc(fd.ph||"")}">${esc(v)}</textarea>`;
+    else if(fd.type === "images") return `<div class="field"><span>${esc(fd.label)}</span>
+      <div class="img-drop" data-imgzone="${fd.k}">
+        <div>📋 複製截圖後，在這個視窗按 <b>Ctrl+V</b>（Mac 按 ⌘+V）貼上<br>也可以把圖片拖進來</div>
+        <button type="button" class="btn sm" data-pick="${fd.k}">🖼️ 選擇圖片</button>
+        <input type="file" accept="image/*" multiple hidden data-file="${fd.k}">
+      </div>
+      <div class="img-previews" data-previews="${fd.k}"></div></div>`;
+    else if(fd.type === "time" && fd.clearable) return `<label class="field"><span>${esc(fd.label)}</span><span class="time-wrap"><input type="time" name="${fd.k}" value="${esc(v)}"><button type="button" class="btn icon-btn" data-clear="${fd.k}" aria-label="清除${esc(fd.label)}">✕</button></span></label>`;
     else if(fd.type === "checkbox") return `<label class="field check-field"><input type="checkbox" name="${fd.k}" ${v?"checked":""}><span>${esc(fd.label)}</span></label>`;
     else input = `<input type="${fd.type||"text"}" name="${fd.k}" value="${esc(v)}" placeholder="${esc(fd.ph||"")}" ${fd.req?"required":""} ${fd.type==="text"&&fd.upper?'style="text-transform:uppercase"':""}>`;
     return `<label class="field"><span>${esc(fd.label)}</span>${input}</label>`;
@@ -1095,10 +1181,64 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     <div class="dlg-foot"><button type="button" class="btn" data-close>取消</button><button class="btn primary" type="submit">${esc(saveText)}</button></div>
   </form>`;
   const form = $("#dlgForm");
-  form.addEventListener("submit", e => {
+  // 圖片欄位
+  const imgFields = fields.flat().filter(fd => fd.type === "images");
+  const imgState = {};
+  const drawPreviews = k => {
+    const box = $(`[data-previews="${k}"]`, form); if(!box) return;
+    box.innerHTML = imgState[k].map((im,i) => `<div class="img-prev"><img ${im.src ? `src="${im.src}"` : `data-img="${esc(im.id)}"`} alt="截圖 ${i+1}"><button type="button" data-rm="${k}:${i}" aria-label="移除這張">✕</button></div>`).join("");
+    hydrateImgs(box);
+  };
+  const addFiles = async (k, files) => {
+    const list = [...files].filter(f => f.type && f.type.startsWith("image/"));
+    if(!list.length) return;
+    for(const file of list){
+      if(imgState[k].length >= 8){ toast("每個行程最多 8 張圖片"); break; }
+      try{ const src = await compressImage(file); imgState[k].push({id:"img" + Date.now().toString(36) + uid().slice(0,4), src, isNew:true}); drawPreviews(k); }
+      catch(err){ toast(err.message || "圖片讀取失敗"); }
+    }
+  };
+  imgFields.forEach(fd => {
+    imgState[fd.k] = (values[fd.k] || []).map(id => ({id, src:imgCache[id] || "", isNew:false}));
+    drawPreviews(fd.k);
+    const zone = $(`[data-imgzone="${fd.k}"]`, form), fileIn = $(`[data-file="${fd.k}"]`, form);
+    $(`[data-pick="${fd.k}"]`, form).onclick = () => fileIn.click();
+    fileIn.onchange = () => { addFiles(fd.k, fileIn.files); fileIn.value = ""; };
+    zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("over"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+    zone.addEventListener("drop", e => { e.preventDefault(); zone.classList.remove("over"); addFiles(fd.k, e.dataTransfer.files); });
+  });
+  if(imgFields.length){
+    form.addEventListener("paste", e => {
+      const files = [...(e.clipboardData?.items || [])].filter(it => it.kind === "file" && it.type.startsWith("image/")).map(it => it.getAsFile()).filter(Boolean);
+      if(!files.length) return;           // 貼的是文字就照常貼進輸入框
+      e.preventDefault(); addFiles(imgFields[0].k, files);
+    });
+  }
+  form.addEventListener("click", e => {
+    const rm = e.target.closest("[data-rm]");
+    if(rm){ const [k,i] = rm.dataset.rm.split(":"); imgState[k].splice(+i,1); drawPreviews(k); return; }
+    const clr = e.target.closest("[data-clear]");
+    if(clr){ form.elements[clr.dataset.clear].value = ""; }
+  });
+  form.addEventListener("submit", async e => {
     e.preventDefault();
+    const btn = $('button[type="submit"]', form);
     const out = {};
-    fields.flat().forEach(fd => { const el = form.elements[fd.k]; out[fd.k] = fd.type==="checkbox" ? el.checked : el.value.trim(); if(fd.upper) out[fd.k] = out[fd.k].toUpperCase(); });
+    fields.flat().forEach(fd => {
+      if(fd.type === "images") return;
+      const el = form.elements[fd.k]; out[fd.k] = fd.type==="checkbox" ? el.checked : el.value.trim(); if(fd.upper) out[fd.k] = out[fd.k].toUpperCase();
+    });
+    if(imgFields.length){
+      const fresh = imgFields.flatMap(fd => imgState[fd.k].filter(im => im.isNew));
+      if(fresh.length){
+        btn.disabled = true; btn.textContent = "上傳圖片中…";
+        try{ for(const im of fresh){ await putImg(im.id, im.src); im.isNew = false; } }
+        catch(err){ console.error(err); btn.disabled = false; btn.textContent = saveText;
+          toast(err.code === "permission-denied" ? "圖片沒有上傳權限：請更新 Firestore 規則（加上 tripImages）" : (err.message || "圖片上傳失敗")); return; }
+      }
+      imgFields.forEach(fd => { out[fd.k] = imgState[fd.k].map(im => im.id); });
+    }
     onSave(out); dlg.close(); save(); render();
   });
   $$("[data-close]", dlg).forEach(b => b.onclick = () => dlg.close());
@@ -1120,10 +1260,12 @@ const FLIGHT_FIELDS = [
   {k:"terminal",label:"航廈"},{k:"note",label:"備註",ph:"行李額度、座位…"}
 ];
 const ITEM_FIELDS = () => [
-  [{k:"time",label:"時間",type:"time"},{k:"transport",label:"交通方式（怎麼去）",type:"select",options:Object.fromEntries(Object.entries(TRANSPORT).map(([k,v])=>[k,(v.icon?v.icon+" ":"")+v.label]))}],
+  [{k:"time",label:"開始時間",type:"time"},{k:"endTime",label:"結束時間（選填）",type:"time",clearable:true}],
+  {k:"transport",label:"交通方式（怎麼去）",type:"select",options:Object.fromEntries(Object.entries(TRANSPORT).map(([k,v])=>[k,(v.icon?v.icon+" ":"")+v.label]))},
   {k:"title",label:"行程名稱",req:true,ph:"例如：淺草寺"},
   {k:"place",label:"Google 地圖搜尋地點",ph:"地名或地址，會產生地圖連結"},
-  {k:"note",label:"備註",type:"textarea",ph:"門票、營業時間、必吃…"}
+  {k:"note",label:"備註",type:"textarea",ph:"門票、營業時間、必吃…"},
+  {k:"images",label:"截圖／照片（車票、訂位、地圖…）",type:"images"}
 ];
 const STAY_FIELDS = [
   {k:"name",label:"住宿名稱",req:true},
@@ -1232,9 +1374,17 @@ const ACTIONS = {
   "del-day"(id){ removeWithUndo(data.days, id, d => fmtDate(d.date) + " 的行程"); },
   "pick-day"(id){ if(id === activeDay) return; activeDay = id; renderDays(motionOK()); },
   "add-item"(){ const day = findDay(); const last = day.items.at(-1); let t = "";
-    if(last?.time){ const [h,m] = last.time.split(":").map(Number); t = String(Math.min(h+1,23)).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
+    if(last?.endTime) t = last.endTime;
+    else if(last?.time){ const [h,m] = last.time.split(":").map(Number); t = String(Math.min(h+1,23)).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
     openForm({title:"新增行程", fields:ITEM_FIELDS(), values:{time:t||"09:00",transport:"walk"}, onSave:v => day.items.push({id:uid(),...v})}); },
   "edit-item"(id){ const it = findDay().items.find(x=>x.id===id); openForm({title:"編輯行程", fields:ITEM_FIELDS(), values:it, onSave:v => Object.assign(it,v)}); },
+  "view-img"(id){
+    const lb = $("#lb"), src = imgCache[id];
+    if(!src) return;
+    lb.innerHTML = `<img src="${src}" alt="放大的截圖"><p>點一下關閉</p>`;
+    lb.onclick = () => lb.close();
+    lb.showModal();
+  },
   "del-item"(id){ removeWithUndo(findDay().items, id, it => it.title); },
   "add-stay"(){ openForm({title:"新增住宿", fields:STAY_FIELDS, values:{checkin:data.start,checkout:data.end}, onSave:v => data.stays.push({id:uid(),...v})}); },
   "edit-stay"(id){ const s = data.stays.find(x=>x.id===id); openForm({title:"編輯住宿", fields:STAY_FIELDS, values:s, onSave:v => Object.assign(s,v)}); },
