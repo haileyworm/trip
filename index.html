@@ -250,6 +250,7 @@ dialog#lb img{display:block;max-width:96vw;max-height:88dvh;border:var(--line) s
 dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
 .tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
+.note-link{color:var(--primary-deep);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
 .map-link{display:inline-flex;align-items:flex-start;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:14px;padding:1px 10px;line-height:1.7;background:var(--paper);max-width:100%;word-break:break-word}
 .map-link:hover{background:var(--water)}
 
@@ -611,6 +612,17 @@ function fmtDate(s, withYear){ const d = parseDate(s); if(!d) return ""; return 
 function fmtWeek(s){ const d = parseDate(s); return d ? "週" + WEEK[d.getDay()] : ""; }
 function addDays(s, n){ const d = parseDate(s) || new Date(); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function dayDiff(a, b){ return Math.round((parseDate(b) - parseDate(a)) / 864e5); }
+/* 備註裡的網址變成可以點的連結（另開新分頁） */
+function linkify(text){
+  return esc(text).replace(/(https?:\/\/|www\.)[\w\-.~:\/?#\[\]@!$&()*+,;=%]+/gi, raw => {   // 只吃英數網址字元，後面接中文也不會黏進去
+    const m = raw.match(/^(.*?)([)\]}.,!?;:，。！？；：、）」』]*)$/);
+    const url = m[1], tail = m[2];
+    if(!url) return raw;
+    const href = /^www\./i.test(url) ? "https://" + url : url;
+    const label = url.length > 42 ? url.slice(0, 40) + "…" : url;
+    return `<a class="note-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>${tail}`;
+  });
+}
 function mapUrl(q){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q); }
 
 /* 交通方式 → 顏色標籤（可自行增減） */
@@ -1096,7 +1108,7 @@ function renderFlights(){
       <div class="flight-foot">
         ${f.airline||f.no ? `<span><b>航班</b>${esc(f.airline)} ${esc(f.no)}</span>` : ""}
         ${f.terminal ? `<span><b>航廈</b>${esc(f.terminal)}</span>` : ""}
-        ${f.note ? `<span><b>備註</b>${esc(f.note)}</span>` : ""}
+        ${f.note ? `<span><b>備註</b>${linkify(f.note)}</span>` : ""}
       </div>
     </article>`).join("") + `</div>` + (n > 1 ? `
     <div class="fl-nav">
@@ -1150,7 +1162,7 @@ function renderDays(bounce){
     return `<div class="tl-card">
         <div class="tl-row">${showTime && it.time ? `<span class="tag time">🕘 ${esc(it.time)}${it.endTime ? "–" + esc(it.endTime) : ""}</span>` : ""}${tr.label && it.transport ? `<span class="tag ${tr.color}">${tr.icon} ${esc(tr.label)}</span>` : ""}${dur ? `<span class="tag dur">⏱ ${dur}</span>` : ""}</div>
         <h4>${esc(it.title || "（未命名）")}</h4>
-        ${it.note ? `<p class="tl-note">${esc(it.note)}</p>` : ""}
+        ${it.note ? `<p class="tl-note">${linkify(it.note)}</p>` : ""}
         ${imgs}
         <div class="tl-actions">
           ${places.map(pl => `<a class="map-link" href="${mapUrl(pl)}" target="_blank" rel="noopener">📍 ${esc(pl)}</a>`).join("")}
@@ -1234,7 +1246,7 @@ function renderStays(){
         ${s.address ? `<dt>地址</dt><dd><a class="map-link" href="${mapUrl(s.address + " " + (s.name||""))}" target="_blank" rel="noopener">📍 ${esc(s.address)}</a></dd>` : ""}
         ${s.phone ? `<dt>電話</dt><dd><a href="tel:${esc(s.phone.replace(/[^\d+]/g,""))}">${esc(s.phone)}</a></dd>` : ""}
         ${s.booking ? `<dt>訂單</dt><dd>${esc(s.booking)}</dd>` : ""}
-        ${s.note ? `<dt>備註</dt><dd>${esc(s.note)}</dd>` : ""}
+        ${s.note ? `<dt>備註</dt><dd>${linkify(s.note)}</dd>` : ""}
       </dl>
     </article>`;
   }).join("");
