@@ -211,9 +211,23 @@ body.editing .edit-only.block{display:flex!important}
 .tag.time{background:var(--paper)}
 .tl-par{border:var(--line) dashed var(--ink);border-radius:22px;padding:8px 8px 10px;background:var(--paper);min-width:0}
 .par-head{font-size:13px;padding:0 6px 6px;color:var(--ink)}
-.par-cards{display:grid;grid-template-columns:1fr;gap:10px}
-.par-cards .tl-card{box-shadow:2px 2px 0 var(--ink)}
-@media (min-width:640px){.par-cards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}}
+/* 分頭行動：像行事曆，依時間上下排列、重疊的並排 */
+.par-grid{display:grid;column-gap:8px;row-gap:6px;overflow-x:auto;padding:2px 2px 6px 0;-webkit-overflow-scrolling:touch}
+.par-tick{grid-column:1;align-self:start;font-size:11px;line-height:1;color:var(--muted);white-space:nowrap;padding-top:1px;position:relative;z-index:1}
+.par-line{grid-column:2/-1;align-self:start;height:0;border-top:2px dotted #E2DBD0;margin-top:5px}
+.par-cell{display:flex;min-width:0;position:relative;z-index:1}
+.par-cell > .tl-card{flex:1;padding:8px 10px 10px;box-shadow:2px 2px 0 var(--ink)}
+.par-cell .tl-card h4{font-size:15px}
+.par-cell .tag,.par-cell .map-link{font-size:12px}
+@media (max-width:639px){
+  .tl-item.has-par{grid-template-columns:50px 26px minmax(0,1fr)}
+  .par-cell > .tl-card{padding:7px 8px 9px;border-radius:16px}
+  .par-cell .tag{padding:0 7px;font-size:11px}
+  .par-cell .tag.dur{display:none}
+  .par-cell .map-link{font-size:11px;padding:1px 7px}
+  .par-cell .tl-note{font-size:13px}
+  .par-cell .tl-imgs button{width:56px;height:56px}
+}
 .tl-imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .tl-imgs button{padding:0;border:2px solid var(--ink);border-radius:12px;overflow:hidden;width:76px;height:76px;background:var(--paper);cursor:zoom-in;flex:none}
 .tl-imgs img,.img-prev img{width:100%;height:100%;object-fit:cover;display:block}
@@ -224,6 +238,9 @@ body.editing .edit-only.block{display:flex!important}
 .img-prev{position:relative;width:76px;height:76px;border:2px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--paper)}
 .img-prev button{position:absolute;top:3px;right:3px;width:24px;height:24px;border-radius:50%;border:2px solid var(--ink);background:var(--card);font-size:12px;padding:0;cursor:pointer;line-height:1}
 .time-wrap{display:flex;gap:6px;align-items:center}
+.multi{display:grid;gap:8px}
+.multi-row{display:flex;gap:6px;align-items:center}
+.multi-row input{flex:1;min-width:0}
 .time-pick{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
 .field .time-pick select{flex:1;min-width:0;padding:8px 6px;text-align:center}
 .time-wrap input{flex:1;min-width:0}
@@ -889,6 +906,8 @@ function compressImage(file, max = 1600){
     im.src = url;
   });
 }
+/* 行程的地圖地點（可以多個；舊資料只有一個 place 也相容） */
+function placesOf(it){ return (it.places && it.places.length ? it.places : (it.place ? [it.place] : [])).filter(Boolean); }
 function durText(a, b){
   if(!a || !b) return "";
   const m = t => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; };
@@ -1108,7 +1127,7 @@ function renderDays(bounce){
   // 單張行程卡片（分頭行動時，卡片上另外標出自己的時段）
   const card = (it, showTime) => {
     const tr = TRANSPORT[it.transport] || TRANSPORT[""];
-    const q = it.place || it.title;
+    const places = placesOf(it);
     const dur = durText(it.time, it.endTime);
     const imgs = (it.images || []).length ? `<div class="tl-imgs">${it.images.map((id,n) => `<button type="button" data-act="view-img" data-id="${esc(id)}" aria-label="放大第 ${n+1} 張圖片"><img data-img="${esc(id)}" alt="截圖 ${n+1}"></button>`).join("")}</div>` : "";
     return `<div class="tl-card">
@@ -1117,7 +1136,7 @@ function renderDays(bounce){
         ${it.note ? `<p class="tl-note">${esc(it.note)}</p>` : ""}
         ${imgs}
         <div class="tl-actions">
-          ${it.place ? `<a class="map-link" href="${mapUrl(it.place)}" target="_blank" rel="noopener">📍 ${esc(it.place)}</a>` : ""}
+          ${places.map(pl => `<a class="map-link" href="${mapUrl(pl)}" target="_blank" rel="noopener">📍 ${esc(pl)}</a>`).join("")}
           <button class="btn sm edit-only" data-act="edit-item" data-id="${it.id}">✏️ 編輯</button>
           <button class="btn sm edit-only" data-act="del-item" data-id="${it.id}">🗑️ 刪除</button>
         </div>
@@ -1133,10 +1152,27 @@ function renderDays(bounce){
       if(it.endTime && (!last.endTime || toMin(it.endTime) > toMin(last.endTime))) last.endTime = it.endTime;
     } else clusters.push({items:[it], start:st, end:en ?? st, time:it.time, endTime:it.endTime || ""});
   });
+  // 分頭行動的格子：每個時間點是一列，時間重疊的行程放不同欄，同一欄可以上下接續
+  const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  const parGrid = c => {
+    const ivs = c.items.map(it => { const st = toMin(it.time); let en = it.endTime ? toMin(it.endTime) : null; if(en !== null && en <= st) en = null; return {it, st, en}; });
+    const B = [...new Set(ivs.flatMap(v => v.en !== null ? [v.st, v.en] : [v.st]))].sort((a,b) => a - b);
+    if(B.length < 2) B.push(B[0] + 30);
+    ivs.forEach(v => { v.r1 = B.indexOf(v.st); v.r2 = v.en !== null ? B.indexOf(v.en) : v.r1 + 1; if(v.r2 <= v.r1) v.r2 = v.r1 + 1; if(v.r2 > B.length - 1) B.push(B.at(-1) + 30); });
+    const order = [...ivs].sort((a,b) => a.r1 - b.r1 || a.r2 - b.r2), laneEnd = [];   // 同時開始時，先結束的放左邊
+    order.forEach(v => { let l = laneEnd.findIndex(e => e <= v.r1); if(l < 0){ l = laneEnd.length; laneEnd.push(0); } laneEnd[l] = v.r2; v.lane = l; });
+    const lanes = laneEnd.length;
+    const rows = B.slice(0, -1).map((b,i) => `minmax(${Math.max(16, Math.round((B[i+1] - b) * 0.9))}px, auto)`).join(" ") + " auto";
+    const cols = `32px repeat(${lanes}, minmax(${lanes > 2 ? "130px" : "0"}, 1fr))`;
+    return `<div class="par-grid" style="grid-template-columns:${cols};grid-template-rows:${rows}">
+      ${B.map((b,i) => `<div class="par-tick" style="grid-row:${i+1}">${hhmm(b)}</div><div class="par-line" style="grid-row:${i+1}"></div>`).join("")}
+      ${ivs.map(v => `<div class="par-cell" style="grid-column:${v.lane + 2};grid-row:${v.r1 + 1} / ${v.r2 + 1}">${card(v.it, true)}</div>`).join("")}
+    </div>`;
+  };
   const items = clusters.map(c => {
     const multi = c.items.length > 1;
     const col = multi ? "var(--primary)" : colorOf(c.items[0]);
-    return `<li class="tl-item">
+    return `<li class="tl-item ${multi ? "has-par" : ""}">
       <div class="tl-time">${esc(c.time || "")}${c.endTime ? `<span class="tl-end">${esc(c.endTime)}</span>` : ""}</div>
       <div class="tl-dots" style="--c:${col}">
         <div class="tl-dot" style="background:var(--c)"></div>
@@ -1144,7 +1180,7 @@ function renderDays(bounce){
       </div>
       ${multi ? `<div class="tl-par">
         <div class="par-head">🔀 分頭行動・${c.items.length} 個行程</div>
-        <div class="par-cards">${c.items.map(it => card(it, true)).join("")}</div>
+        ${parGrid(c)}
       </div>` : card(c.items[0], false)}
     </li>`;
   }).join("");
@@ -1219,12 +1255,18 @@ function renderList(key){
 
 /* ---------- 表單對話框 ---------- */
 const dlg = $("#dlg");
+function multiRow(fd, x){ return `<div class="multi-row"><input type="text" value="${esc(x)}" placeholder="${esc(fd.ph||"")}" aria-label="${esc(fd.label)}"><button type="button" class="btn icon-btn" data-multi-rm aria-label="移除這個地點">✕</button></div>`; }
 function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   const f = (fd) => {
     const v = values[fd.k] ?? fd.def ?? "";
     let input;
     if(fd.type === "select") input = `<select name="${fd.k}">${Object.entries(fd.options).map(([k,l])=>`<option value="${esc(k)}" ${k===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
     else if(fd.type === "textarea") input = `<textarea name="${fd.k}" placeholder="${esc(fd.ph||"")}">${esc(v)}</textarea>`;
+    else if(fd.type === "multi"){
+      const list = (Array.isArray(v) ? v : (v ? [v] : [])).filter(Boolean);
+      const rows = (list.length ? list : [""]).map(x => multiRow(fd, x)).join("");
+      return `<div class="field"><span>${esc(fd.label)}</span><div class="multi" data-multi="${fd.k}">${rows}</div><button type="button" class="btn sm" data-multi-add="${fd.k}" style="justify-self:start">＋ 再加一個地點</button></div>`;
+    }
     else if(fd.type === "images") return `<div class="field"><span>${esc(fd.label)}</span>
       <div class="img-drop" data-imgzone="${fd.k}">
         <div>📋 複製截圖後，在這個視窗按 <b>Ctrl+V</b>（Mac 按 ⌘+V）貼上<br>也可以把圖片拖進來</div>
@@ -1287,6 +1329,12 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   form.addEventListener("click", e => {
     const rm = e.target.closest("[data-rm]");
     if(rm){ const [k,i] = rm.dataset.rm.split(":"); imgState[k].splice(+i,1); drawPreviews(k); return; }
+    const madd = e.target.closest("[data-multi-add]");
+    if(madd){ const fd = fields.flat().find(f => f.k === madd.dataset.multiAdd); const box = $(`[data-multi="${fd.k}"]`, form);
+      box.insertAdjacentHTML("beforeend", multiRow(fd, "")); $("input", box.lastElementChild).focus(); return; }
+    const mrm = e.target.closest("[data-multi-rm]");
+    if(mrm){ const row = mrm.closest(".multi-row"), box = row.parentElement;
+      if(box.children.length > 1) row.remove(); else $("input", row).value = ""; return; }
     const clr = e.target.closest("[data-clear]");
     if(clr){ const tp = $(`[data-time="${clr.dataset.clear}"]`, form); $$("select", tp).forEach(x => x.value = ""); form.elements[clr.dataset.clear].value = ""; }
   });
@@ -1305,6 +1353,7 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     const out = {};
     fields.flat().forEach(fd => {
       if(fd.type === "images") return;
+      if(fd.type === "multi"){ out[fd.k] = $$(`[data-multi="${fd.k}"] input`, form).map(i => i.value.trim()).filter(Boolean); return; }
       const el = form.elements[fd.k]; out[fd.k] = fd.type==="checkbox" ? el.checked : el.value.trim(); if(fd.upper) out[fd.k] = out[fd.k].toUpperCase();
     });
     if(imgFields.length){
@@ -1341,7 +1390,7 @@ const ITEM_FIELDS = () => [
   [{k:"time",label:"開始時間",type:"time"},{k:"endTime",label:"結束時間（選填）",type:"time",clearable:true}],
   {k:"transport",label:"交通方式（怎麼去）",type:"select",options:Object.fromEntries(Object.entries(TRANSPORT).map(([k,v])=>[k,(v.icon?v.icon+" ":"")+v.label]))},
   {k:"title",label:"行程名稱",req:true,ph:"例如：淺草寺"},
-  {k:"place",label:"Google 地圖搜尋地點",ph:"地名或地址，會產生地圖連結"},
+  {k:"places",label:"Google 地圖搜尋地點（可以加很多個）",ph:"地名或地址，會產生地圖連結",type:"multi"},
   {k:"note",label:"備註",type:"textarea",ph:"門票、營業時間、必吃…"},
   {k:"images",label:"截圖／照片（車票、訂位、地圖…）",type:"images"}
 ];
@@ -1456,7 +1505,7 @@ const ACTIONS = {
     if(last?.endTime) t = last.endTime;
     else if(last?.time){ const [h,m] = last.time.split(":").map(Number); t = String(Math.min(h+1,23)).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
     openForm({title:"新增行程", fields:ITEM_FIELDS(), values:{time:t||"09:00",transport:"walk"}, onSave:v => day.items.push({id:uid(),...v})}); },
-  "edit-item"(id){ const it = findDay().items.find(x=>x.id===id); openForm({title:"編輯行程", fields:ITEM_FIELDS(), values:it, onSave:v => Object.assign(it,v)}); },
+  "edit-item"(id){ const it = findDay().items.find(x=>x.id===id); openForm({title:"編輯行程", fields:ITEM_FIELDS(), values:{...it, places:placesOf(it)}, onSave:v => { Object.assign(it,v); delete it.place; }}); },
   "view-img"(id){
     const lb = $("#lb"), src = imgCache[id];
     if(!src) return;
