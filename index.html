@@ -158,12 +158,10 @@ body.editing .edit-only.block{display:flex!important}
 /* ---------- 航班 ---------- */
 .flight{padding:0;overflow:hidden}
 /* 航班：左右滑動 */
-.fl-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 16px 12px;margin:0 -16px;scroll-padding:0 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.fl-track{display:flex;gap:32px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 16px 12px;margin:0 -16px;scroll-padding:0 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
 .fl-track::-webkit-scrollbar{display:none}
 .fl-track:focus-visible{outline-offset:-2px}
-.fl-track > .flight{flex:0 0 88%;scroll-snap-align:start;margin-bottom:0}
-.fl-track.single > .flight{flex-basis:100%}
-@media (min-width:640px){.fl-track > .flight{flex-basis:70%}}
+.fl-track > .flight{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;margin-bottom:0}
 .fl-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin:2px 0 14px}
 .fl-dots{display:flex;gap:8px}
 .fl-dots button{width:12px;height:12px;padding:0;border-radius:999px;border:2px solid var(--ink);background:var(--card);cursor:pointer;transition:width .25s,background .25s}
@@ -235,7 +233,7 @@ dialog#lb img{display:block;max-width:96vw;max-height:88dvh;border:var(--line) s
 dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
 .tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
-.map-link{display:inline-flex;align-items:center;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:999px;padding:0 10px;line-height:1.7;background:var(--paper)}
+.map-link{display:inline-flex;align-items:flex-start;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:14px;padding:1px 10px;line-height:1.7;background:var(--paper);max-width:100%;word-break:break-word}
 .map-link:hover{background:var(--water)}
 
 /* ---------- 住宿 ---------- */
@@ -1119,7 +1117,7 @@ function renderDays(bounce){
         ${it.note ? `<p class="tl-note">${esc(it.note)}</p>` : ""}
         ${imgs}
         <div class="tl-actions">
-          ${q ? `<a class="map-link" href="${mapUrl(q)}" target="_blank" rel="noopener">📍 ${esc(it.place || "Google 地圖")}</a>` : ""}
+          ${it.place ? `<a class="map-link" href="${mapUrl(it.place)}" target="_blank" rel="noopener">📍 ${esc(it.place)}</a>` : ""}
           <button class="btn sm edit-only" data-act="edit-item" data-id="${it.id}">✏️ 編輯</button>
           <button class="btn sm edit-only" data-act="del-item" data-id="${it.id}">🗑️ 刪除</button>
         </div>
