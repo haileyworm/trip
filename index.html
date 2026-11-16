@@ -241,6 +241,11 @@ body.editing .edit-only.block{display:flex!important}
 .multi{display:grid;gap:8px}
 .multi-row{display:flex;gap:6px;align-items:center}
 .multi-row input{flex:1;min-width:0}
+.multi-row{border-radius:14px}
+.drag-handle{flex:none;width:28px;height:42px;border:0;background:transparent;font-size:18px;letter-spacing:-3px;color:var(--muted);cursor:grab;touch-action:none;padding:0;border-radius:10px;user-select:none;-webkit-user-select:none}
+.drag-handle:active{cursor:grabbing}
+.multi-row.dragging{background:var(--primary);box-shadow:3px 3px 0 var(--ink);position:relative;z-index:2;transform:scale(1.02)}
+.multi-row.dragging .drag-handle{color:var(--ink)}
 .time-pick{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
 .field .time-pick select{flex:1;min-width:0;padding:8px 6px;text-align:center}
 .time-wrap input{flex:1;min-width:0}
@@ -1284,7 +1289,44 @@ function renderList(key){
 
 /* ---------- 表單對話框 ---------- */
 const dlg = $("#dlg");
-function multiRow(fd, x){ return `<div class="multi-row"><input type="text" value="${esc(x)}" placeholder="${esc(fd.ph||"")}" aria-label="${esc(fd.label)}"><button type="button" class="btn icon-btn" data-multi-rm aria-label="移除這個地點">✕</button></div>`; }
+function multiRow(fd, x){ return `<div class="multi-row"><button type="button" class="drag-handle" data-drag aria-label="按住拖曳調整順序（也可以用鍵盤上下鍵）">⋮⋮</button><input type="text" value="${esc(x)}" placeholder="${esc(fd.ph||"")}" aria-label="${esc(fd.label)}"><button type="button" class="btn icon-btn" data-multi-rm aria-label="移除這個地點">✕</button></div>`; }
+/* 只有一個地點時不顯示拖曳把手 */
+function refreshMulti(box){
+  const rows = [...box.children];
+  rows.forEach(r => { $("[data-drag]", r).style.visibility = rows.length > 1 ? "" : "hidden"; });
+}
+/* 按住把手上下拖曳排序（滑鼠、手指都可以） */
+function bindDragSort(form){
+  form.addEventListener("pointerdown", e => {
+    const h = e.target.closest("[data-drag]"); if(!h) return;
+    e.preventDefault();
+    const row = h.closest(".multi-row"), box = row.parentElement;
+    row.classList.add("dragging"); h.focus({preventScroll:true});
+    const move = ev => {
+      ev.preventDefault();
+      const others = [...box.children].filter(r => r !== row);
+      let before = null;
+      for(const r of others){ const rc = r.getBoundingClientRect(); if(ev.clientY < rc.top + rc.height / 2){ before = r; break; } }
+      if(before !== row.nextElementSibling && !(before === null && row === box.lastElementChild)){
+        before ? box.insertBefore(row, before) : box.appendChild(row);
+      }
+    };
+    const end = () => {
+      row.classList.remove("dragging");
+      removeEventListener("pointermove", move); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
+      refreshMulti(box);
+    };
+    addEventListener("pointermove", move, {passive:false}); addEventListener("pointerup", end); addEventListener("pointercancel", end);
+  });
+  form.addEventListener("keydown", e => {
+    const h = e.target.closest("[data-drag]"); if(!h || !["ArrowUp","ArrowDown"].includes(e.key)) return;
+    e.preventDefault();
+    const row = h.closest(".multi-row"), box = row.parentElement;
+    if(e.key === "ArrowUp" && row.previousElementSibling) box.insertBefore(row, row.previousElementSibling);
+    if(e.key === "ArrowDown" && row.nextElementSibling) box.insertBefore(row.nextElementSibling, row);
+    h.focus();
+  });
+}
 function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   const f = (fd) => {
     const v = values[fd.k] ?? fd.def ?? "";
@@ -1321,6 +1363,8 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     <div class="dlg-foot"><button type="button" class="btn" data-close>取消</button><button class="btn primary" type="submit">${esc(saveText)}</button></div>
   </form>`;
   const form = $("#dlgForm");
+  $$("[data-multi]", form).forEach(refreshMulti);
+  bindDragSort(form);
   // 圖片欄位
   const imgFields = fields.flat().filter(fd => fd.type === "images");
   const imgState = {};
@@ -1360,10 +1404,10 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     if(rm){ const [k,i] = rm.dataset.rm.split(":"); imgState[k].splice(+i,1); drawPreviews(k); return; }
     const madd = e.target.closest("[data-multi-add]");
     if(madd){ const fd = fields.flat().find(f => f.k === madd.dataset.multiAdd); const box = $(`[data-multi="${fd.k}"]`, form);
-      box.insertAdjacentHTML("beforeend", multiRow(fd, "")); $("input", box.lastElementChild).focus(); return; }
+      box.insertAdjacentHTML("beforeend", multiRow(fd, "")); refreshMulti(box); $("input", box.lastElementChild).focus(); return; }
     const mrm = e.target.closest("[data-multi-rm]");
     if(mrm){ const row = mrm.closest(".multi-row"), box = row.parentElement;
-      if(box.children.length > 1) row.remove(); else $("input", row).value = ""; return; }
+      if(box.children.length > 1) row.remove(); else $("input", row).value = ""; refreshMulti(box); return; }
     const clr = e.target.closest("[data-clear]");
     if(clr){ const tp = $(`[data-time="${clr.dataset.clear}"]`, form); $$("select", tp).forEach(x => x.value = ""); form.elements[clr.dataset.clear].value = ""; }
   });
