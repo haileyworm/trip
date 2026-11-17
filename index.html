@@ -1999,7 +1999,11 @@ if("IntersectionObserver" in window){
       if(stuck){
         const full = tabs.offsetHeight;
         tabs.classList.add("stuck");
-        tabs.style.marginBottom = Math.max(0, full - tabs.offsetHeight) + "px";
+        // 補回的高度扣掉多出來的空白，讓置頂列和下面內容之間只留一點點距離
+        const diff = Math.max(0, full - tabs.offsetHeight);
+        tabs.style.marginBottom = diff + "px";
+        const gap = $("#dayPanel").getBoundingClientRect().top - tabs.getBoundingClientRect().bottom;
+        tabs.style.marginBottom = Math.max(0, diff - Math.max(0, gap - 12)) + "px";
       } else {
         tabs.classList.remove("stuck");
         tabs.style.marginBottom = "";
