@@ -35,7 +35,9 @@ window.TRIP_CONFIG = {
   },
   
   // 可以編輯行程的 Google 帳號（要跟 Firestore 規則裡的一樣）
-  editors: ["hailey214h@gmail.com"]
+  editors: ["hailey214h@gmail.com"],
+  // 地圖底圖（選填）：到 https://carto.com/basemaps/apikey 申請免費金鑰貼在這裡，就能用更好看的 CARTO 底圖
+  cartoKey: ""
 };
 </script>
 
@@ -272,6 +274,11 @@ dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .pin{transform:translate(-50%,-50%);min-width:28px;height:28px;padding:0 6px;border-radius:999px;background:var(--primary);border:2.5px solid var(--ink);display:grid;place-items:center;font:14px/1 var(--font);color:var(--ink);box-shadow:2px 2px 0 var(--ink);white-space:nowrap;cursor:pointer}
 .pin-no{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--primary);border:2px solid var(--ink);font-size:11px;line-height:1;flex:none}
 .leaflet-container{font-family:var(--font)}
+.leaflet-container:focus,.leaflet-container:focus-visible{outline:none}
+[data-map-style="soft"] .leaflet-tile-pane{filter:saturate(.3) brightness(1.08) contrast(.88) sepia(.12)}
+.map-style-sw{display:flex;gap:4px;background:var(--card);border:2px solid var(--ink);border-radius:999px;padding:3px;box-shadow:2px 2px 0 var(--ink)}
+.map-style-sw button{border:0;background:transparent;border-radius:999px;padding:2px 9px;font:12px/1.6 var(--font);color:var(--ink);cursor:pointer}
+.map-style-sw button.on{background:var(--primary)}
 .leaflet-tooltip{font-family:var(--font);border:2px solid var(--ink);border-radius:10px;box-shadow:2px 2px 0 var(--ink)}
 dialog#mapDlg{width:min(900px,calc(100vw - 24px));padding:0}
 .big-map{height:min(70dvh,620px);border-top:0;isolation:isolate}
@@ -1641,9 +1648,31 @@ function buildMap(el, points, big){
     dragging: big || !touch, tap: false, scrollWheelZoom: big,
     zoomAnimation: motionOK(), fadeAnimation: motionOK(), markerZoomAnimation: motionOK()
   });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap"}).addTo(map);
+  const styles = mapStyles(), pick = styles[mapStyleId()] || styles[Object.keys(styles)[0]];
+  let base = L.tileLayer(pick.url, pick.opt).addTo(map);
+  el.dataset.mapStyle = pick.id;
+  // 右上角切換底圖（記在這台裝置）
+  const sw = L.control({position: "topright"});
+  sw.onAdd = () => {
+    const box = L.DomUtil.create("div", "map-style-sw");
+    box.innerHTML = Object.values(styles).map(st => `<button type="button" data-st="${st.id}" class="${st.id === pick.id ? "on" : ""}">${st.name}</button>`).join("");
+    L.DomEvent.disableClickPropagation(box);
+    box.onclick = e => {
+      const b = e.target.closest("[data-st]"); if(!b) return;
+      const st = styles[b.dataset.st];
+      map.removeLayer(base); base = L.tileLayer(st.url, st.opt).addTo(map); base.bringToBack();
+      el.dataset.mapStyle = st.id; store.set("tripMapStyle", st.id);
+      $$("button", box).forEach(x => x.classList.toggle("on", x === b));
+    };
+    return box;
+  };
+  sw.addTo(map);
   const lls = points.map(p => p.ll);
-  if(lls.length > 1) L.polyline(lls, {color: "#8E7CC3", weight: 3, dashArray: "6 8", opacity: .9}).addTo(map);
+  // 路線：深色外框 + 紫色實線，在任何底圖上都看得清楚
+  if(lls.length > 1){
+    L.polyline(lls, {color: "#3E3A39", weight: 8, opacity: .85, lineCap: "round", lineJoin: "round", interactive: false}).addTo(map);
+    L.polyline(lls, {color: "#A895DB", weight: 4.5, opacity: 1, lineCap: "round", lineJoin: "round", interactive: false}).addTo(map);
+  }
   points.forEach(p => {
     const icon = L.divIcon({className: "pin-wrap", html: `<div class="pin">${esc(p.label)}</div>`, iconSize: null});
     L.marker(p.ll, {icon, keyboard: true, title: `${p.label} ${p.name}`}).addTo(map)
@@ -1654,6 +1683,25 @@ function buildMap(el, points, big){
   else map.fitBounds(L.latLngBounds(lls), {padding: [30, 30], maxZoom: 16});
   return map;
 }
+/* 可選的底圖。「柔和」是 OpenStreetMap 加淡化濾鏡，不用任何設定；有 CARTO 金鑰時多兩種 */
+function mapStyles(){
+  const osm = {url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", opt: {maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}};
+  const list = {
+    soft: {id: "soft", name: "柔和", ...osm},
+    osm:  {id: "osm",  name: "原色", ...osm}
+  };
+  const key = (CFG.cartoKey || "").trim();
+  if(key){
+    const opt = {maxZoom: 20, subdomains: "abcd", attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'};
+    return {
+      voyager:  {id: "voyager",  name: "彩色", url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`, opt},
+      positron: {id: "positron", name: "淺灰", url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(key)}`, opt},
+      ...list
+    };
+  }
+  return list;
+}
+function mapStyleId(){ const v = store.get("tripMapStyle"); const st = mapStyles(); return st[v] ? v : Object.keys(st)[0]; }
 async function drawDayMap(){
   if(dayMap){ dayMap.remove(); dayMap = null; }
   const el = $("#dayMap"); if(!el || !dayMapPoints.length) return;
