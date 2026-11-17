@@ -262,6 +262,20 @@ dialog#lb img{display:block;max-width:96vw;max-height:88dvh;border:var(--line) s
 dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
 .tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
+.day-map-wrap{position:relative;margin:0 0 16px}
+.day-map{height:230px;border:var(--line) solid var(--ink);border-radius:var(--radius);box-shadow:var(--pop);overflow:hidden;isolation:isolate;z-index:0;background:var(--paper)}
+.map-full{position:absolute;right:10px;bottom:10px;z-index:2;background:var(--card);box-shadow:2px 2px 0 var(--ink)}
+.map-hint{margin:-6px 0 14px;font-size:13px}
+.pin-wrap{background:none;border:0}
+.pin{transform:translate(-50%,-50%);min-width:28px;height:28px;padding:0 6px;border-radius:999px;background:var(--primary);border:2.5px solid var(--ink);display:grid;place-items:center;font:14px/1 var(--font);color:var(--ink);box-shadow:2px 2px 0 var(--ink);white-space:nowrap;cursor:pointer}
+.pin-no{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--primary);border:2px solid var(--ink);font-size:11px;line-height:1;flex:none}
+.leaflet-container{font-family:var(--font)}
+.leaflet-tooltip{font-family:var(--font);border:2px solid var(--ink);border-radius:10px;box-shadow:2px 2px 0 var(--ink)}
+dialog#mapDlg{width:min(900px,calc(100vw - 24px));padding:0}
+.big-map{height:min(70dvh,620px);border-top:0;isolation:isolate}
+@media (max-width:520px){ .big-map{height:72dvh} }
+@keyframes flashCard{0%,60%{background:var(--primary)}100%{background:var(--card)}}
+.tl-card.flash{animation:flashCard 1.4s ease-out}
 .note-link{color:var(--primary-deep);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
 .map-link{display:inline-flex;align-items:flex-start;gap:4px;font-size:13px;text-decoration:none;border:2px solid var(--ink);border-radius:14px;padding:1px 10px;line-height:1.7;background:var(--paper);max-width:100%;word-break:break-word}
 .map-link:hover{background:var(--water)}
@@ -530,6 +544,7 @@ html.no-motion{scroll-behavior:auto}
 
 <dialog id="dlg"></dialog>
 <dialog id="lb" aria-label="放大圖片"></dialog>
+<dialog id="mapDlg" aria-label="放大地圖"></dialog>
 
 <!-- =========================================================
      📦 預設行程（雲端還沒有資料時，管理者第一次登入會把這份上傳）
@@ -1172,7 +1187,7 @@ function renderDays(bounce){
     const places = placesOf(it);
     const dur = durText(it.time, it.endTime);
     const imgs = (it.images || []).length ? `<div class="tl-imgs">${it.images.map((id,n) => `<button type="button" data-act="view-img" data-id="${esc(id)}" aria-label="放大第 ${n+1} 張圖片"><img data-img="${esc(id)}" alt="截圖 ${n+1}"></button>`).join("")}</div>` : "";
-    return `<div class="tl-card">
+    return `<div class="tl-card" data-item="${esc(it.id)}">
         <div class="tl-row">${showTime && it.time ? `<span class="tag time">🕘 ${esc(it.time)}${it.endTime ? "–" + esc(it.endTime) : ""}</span>` : ""}${tr.label && it.transport ? `<span class="tag ${tr.color}">${tr.icon} ${esc(tr.label)}</span>` : ""}${dur ? `<span class="tag dur">⏱ ${dur}</span>` : ""}</div>
         <h4>${esc(it.title || "（未命名）")}</h4>
         ${it.note ? `<p class="tl-note">${linkify(it.note)}</p>` : ""}
@@ -1193,6 +1208,17 @@ function renderDays(bounce){
       last.items.push(it); last.end = Math.max(last.end, en ?? st);
       if(it.endTime && (!last.endTime || toMin(it.endTime) > toMin(last.endTime))) last.endTime = it.endTime;
     } else clusters.push({items:[it], start:st, end:en ?? st, time:it.time, endTime:it.endTime || ""});
+  });
+  // 地圖編號：有地點的組依序編 1、2、3…；同一組的卡片用同一個數字；一張卡有多個地點就是 X.1、X.2…
+  // （沒有地標、或地標都還沒定位的卡片直接跳過，編號不會空號）
+  const mapPoints = [], unfound = []; let pinN = 0;
+  clusters.forEach(c => {
+    const located = c.items.map(it => ({it, pts: placesOf(it).filter(name => { const ll = data.geo?.[name]; if(ll === null) unfound.push(name); return Array.isArray(ll); })}));
+    if(!located.some(x => x.pts.length)) return;
+    pinN++;
+    located.forEach(({it, pts}) => pts.forEach((name, pi) => {
+      mapPoints.push({ll: data.geo[name], label: pts.length > 1 ? `${pinN}.${pi+1}` : `${pinN}`, name, itemId: it.id, title: it.title});
+    }));
   });
   // 分頭行動的格子：每個時間點是一列，時間重疊的行程放不同欄，同一欄可以上下接續
   const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
@@ -1232,9 +1258,14 @@ function renderDays(bounce){
         <span class="muted">${esc(fmtDate(day.date,true))} ${esc(fmtWeek(day.date))}・${day.items.length} 個行程</span></div>
       <span class="edit-only" style="gap:6px"><button class="btn icon-btn" data-act="edit-day" data-id="${day.id}" aria-label="編輯這一天">✏️</button><button class="btn icon-btn" data-act="del-day" data-id="${day.id}" aria-label="刪除這一天">🗑️</button></span>
     </div>
+    ${mapPoints.length ? `<div class="day-map-wrap"><div class="day-map" id="dayMap" aria-label="這一天的地點地圖"></div><button type="button" class="btn icon-btn map-full" data-act="map-full" aria-label="放大地圖">⛶</button></div>` : ""}
+    ${canEdit && editing ? `<p class="muted map-hint">🗺️ 編輯完按「✅ 完成」，地圖會依照新的地點自動更新。</p>` : ""}
+    ${canEdit && unfound.length ? `<p class="muted map-hint">⚠️ 地圖上找不到：${unfound.map(esc).join("、")}。可以改成更完整的名稱或地址（例如加上城市名），再按「完成」重新定位。</p>` : ""}
     ${day.items.length ? `<ol class="timeline ${bounce?"bounce":""}">${items}</ol>` : `<div class="empty">這天還沒有安排${canEdit?"，按下方按鈕新增":""}</div>`}
     <button class="btn ghost edit-only" data-act="add-item">＋ 新增行程</button>`;
   hydrateImgs(panel);
+  dayMapPoints = mapPoints;
+  drawDayMap();
   if(bounce){
     $$(".timeline.bounce > li", panel).forEach((li,i) => li.style.animationDelay = (i*70)+"ms");
     const tab = $(`.day-tab[data-id="${activeDay}"]`);
@@ -1540,6 +1571,86 @@ function syncDays(d){
   return d.days.map(x => x.date).join() !== before ? `每日行程已依日期更新為 ${n} 天 ✓` : "";
 }
 
+/* ---------- 每日地圖（Leaflet + OpenStreetMap，免費、不用金鑰） ---------- */
+let leafletP = null, dayMap = null, bigMap = null, dayMapPoints = [];
+function loadLeaflet(){
+  if(window.L) return Promise.resolve(window.L);
+  if(leafletP) return leafletP;
+  leafletP = new Promise((resolve, reject) => {
+    const css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"; document.head.appendChild(css);
+    const js = document.createElement("script"); js.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    js.onload = () => resolve(window.L); js.onerror = () => { leafletP = null; reject(new Error("地圖載入失敗")); };
+    document.head.appendChild(js);
+  });
+  return leafletP;
+}
+function buildMap(el, points, big){
+  const L = window.L, touch = matchMedia("(pointer: coarse)").matches;
+  const map = L.map(el, {
+    zoomControl: true, attributionControl: true,
+    dragging: big || !touch, tap: false, scrollWheelZoom: big,
+    zoomAnimation: motionOK(), fadeAnimation: motionOK(), markerZoomAnimation: motionOK()
+  });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom: 19, attribution: "© OpenStreetMap"}).addTo(map);
+  const lls = points.map(p => p.ll);
+  if(lls.length > 1) L.polyline(lls, {color: "#8E7CC3", weight: 3, dashArray: "6 8", opacity: .9}).addTo(map);
+  points.forEach(p => {
+    const icon = L.divIcon({className: "pin-wrap", html: `<div class="pin">${esc(p.label)}</div>`, iconSize: null});
+    L.marker(p.ll, {icon, keyboard: true, title: `${p.label} ${p.name}`}).addTo(map)
+      .bindTooltip(`${esc(p.label)}｜${esc(p.title || p.name)}<br><small>${esc(p.name)}</small>`, {direction: "top", offset: [0, -14]})
+      .on("click", () => { if(big) $("#mapDlg").close(); jumpToCard(p.itemId); });
+  });
+  if(lls.length === 1) map.setView(lls[0], 15);
+  else map.fitBounds(L.latLngBounds(lls), {padding: [30, 30], maxZoom: 16});
+  return map;
+}
+async function drawDayMap(){
+  if(dayMap){ dayMap.remove(); dayMap = null; }
+  const el = $("#dayMap"); if(!el || !dayMapPoints.length) return;
+  try{ await loadLeaflet(); }catch(e){ el.innerHTML = `<p class="muted" style="padding:12px">地圖暫時載入不了，請檢查網路</p>`; return; }
+  if(!el.isConnected) return;
+  dayMap = buildMap(el, dayMapPoints, false);
+}
+function jumpToCard(itemId){
+  const card = $(`.tl-card[data-item="${CSS.escape(itemId)}"]`); if(!card) return;
+  card.scrollIntoView({block: "center", behavior: motionOK() ? "smooth" : "auto"});
+  card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+}
+/* 地點 → 座標（OpenStreetMap 的 Nominatim，免費但每秒最多查 1 次，所以只在按「完成」時查新的地點） */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function geocodeOne(name){
+  const tries = [name, ...name.split(/[\s、，,／/]+/).filter(t => t.length > 1 && t !== name).sort((a,b) => b.length - a.length)].slice(0, 3);
+  for(let i = 0; i < tries.length; i++){
+    if(i) await sleep(1100);
+    try{
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW,zh,ja,en&q=" + encodeURIComponent(tries[i]));
+      if(r.ok){ const j = await r.json(); if(j[0]) return [+(+j[0].lat).toFixed(6), +(+j[0].lon).toFixed(6)]; }
+    }catch(e){ console.warn(e); return undefined; }   // 網路錯誤：下次再試
+  }
+  return null;   // 真的找不到
+}
+let geoBusy = false;
+async function updateGeo(){
+  if(geoBusy || !data) return;
+  const tripId = currentId, d = data;
+  d.geo = d.geo || {};
+  const names = [...new Set(d.days.flatMap(day => day.items.flatMap(placesOf)))];
+  const todo = names.filter(n => d.geo[n] === undefined);   // 只查新的地點；找不到的改了名稱就會重新查
+  if(!todo.length) return;
+  geoBusy = true;
+  let changed = false;
+  for(let i = 0; i < todo.length; i++){
+    toast(`🗺️ 地圖定位中 ${i+1} / ${todo.length}：${todo[i]}`);
+    const ll = await geocodeOne(todo[i]);
+    if(ll !== undefined){ d.geo[todo[i]] = ll; changed = true; }
+    if(i < todo.length - 1) await sleep(1100);
+  }
+  geoBusy = false;
+  if(changed){ writeTrip(tripId, d); if(currentId === tripId) renderDays(false); }
+  const miss = todo.filter(n => d.geo[n] === null).length;
+  toast(miss ? `地圖更新好了，有 ${miss} 個地點找不到位置` : "地圖更新好了 ✓");
+}
+
 /* ---------- 動作 ---------- */
 const findDay = () => data.days.find(d => d.id === activeDay);
 const inAppBrowser = /Line\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
@@ -1576,7 +1687,18 @@ const ACTIONS = {
       toast(`已刪除「${d.title}」`, () => { writeTrip(id, d, true); route(); }); };
     dlg.showModal();
   },
-  "toggle-edit"(){ if(!canEdit) return; editing = !editing; render(); toast(editing ? "編輯模式：點 ✏️ 修改、🗑️ 刪除" : (CLOUD ? "已同步給所有人 ✓" : "已儲存 ✓")); },
+  "toggle-edit"(){ if(!canEdit) return; editing = !editing; render(); toast(editing ? "編輯模式：點 ✏️ 修改、🗑️ 刪除" : (CLOUD ? "已同步給所有人 ✓" : "已儲存 ✓"));
+    if(!editing) setTimeout(updateGeo, 800); },
+  async "map-full"(){
+    const dlgM = $("#mapDlg");
+    dlgM.innerHTML = `<div class="dlg-head"><h3>🗺️ 這一天的地點</h3><button class="btn icon-btn" data-close-map aria-label="關閉">✕</button></div><div id="bigMap" class="big-map"></div><p class="muted" style="margin:8px 14px 12px">點數字會跳到對應的行程卡片</p>`;
+    $("[data-close-map]", dlgM).onclick = () => dlgM.close();
+    dlgM.onclose = () => { if(bigMap){ bigMap.remove(); bigMap = null; } };
+    dlgM.showModal();
+    await loadLeaflet();
+    bigMap = buildMap($("#bigMap"), dayMapPoints, true);
+    setTimeout(() => bigMap && bigMap.invalidateSize(), 60);
+  },
   "edit-trip"(){ openForm({title:"旅程資訊", fields:TRIP_FIELDS, values:data, onSave:v => {
     Object.assign(data, v);
     const msg = syncDays(data);
