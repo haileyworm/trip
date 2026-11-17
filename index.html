@@ -533,6 +533,7 @@ html.no-motion{scroll-behavior:auto}
     </div>
     <div class="card">
       <p id="syncInfo" class="muted" style="margin:0 0 12px"></p>
+      <p class="muted" style="margin:0 0 12px">🏷️ 目前版本：<span id="appVersion" style="color:var(--ink)"></span></p>
       <div class="tools-grid">
         <button class="btn yellow" data-act="share">🔗 分享這個頁面</button>
         <button class="btn water hidden" data-act="login" id="loginBtn">🔑 管理者登入</button>
@@ -1310,8 +1311,9 @@ function renderDays(bounce){
     if(tab){ tab.classList.add("pop"); tab.parentElement.scrollTo({left: tab.offsetLeft - tab.parentElement.clientWidth/2 + tab.offsetWidth/2, behavior: motionOK() ? "smooth" : "auto"}); }
     // 在置頂狀態切換日期時，捲回這一天的開頭
     if(tabs.classList.contains("stuck")){
-      const y = panel.getBoundingClientRect().top + scrollY - tabs.offsetHeight - $("#nav").offsetHeight - 8;
-      scrollTo({top: y, behavior: motionOK() ? "smooth" : "auto"});
+      // 維持小置頂列，捲到「Day X｜標題」剛好在置頂列正下方
+      const g = titleGap();
+      if(g !== null && Math.abs(g) > 2){ snapping = true; scrollBy({top: g, behavior: motionOK() ? "smooth" : "auto"}); setTimeout(() => { snapping = false; }, 450); }
     }
   }
 }
@@ -2001,14 +2003,7 @@ if("IntersectionObserver" in window){
       if(stuck){
         const full = tabs.offsetHeight;
         tabs.classList.add("stuck");
-        // 讓「Day X｜標題」剛好出現在置頂列正下方（留 12px）。
-        // 滑動時畫面常會多跑一段，這裡依當下位置補回，不管滑多快，剛置頂時都看得到標題
-        const diff = Math.max(0, full - tabs.offsetHeight);
-        tabs.style.marginBottom = "0px";
-        const gap = $("#dayPanel").getBoundingClientRect().top - tabs.getBoundingClientRect().bottom;
-        const need = 12 - gap;
-        // 一下子跳很遠（例如點上方選單、重新整理回到原位）就不硬拉回標題，只補回縮小的高度
-        tabs.style.marginBottom = (need > 320 ? diff : Math.max(0, need)) + "px";
+        tabs.style.marginBottom = Math.max(0, full - tabs.offsetHeight) + "px";
       } else {
         tabs.classList.remove("stuck");
         tabs.style.marginBottom = "";
@@ -2018,6 +2013,31 @@ if("IntersectionObserver" in window){
   };
   watchDayTabs(); addEventListener("resize", watchDayTabs);
 }
+/* 「Day X｜標題」和置頂列的距離（正數＝中間有空白，負數＝標題被蓋住） */
+function titleGap(){
+  const head = $("#dayPanel .day-head"), tabs = $("#dayTabs");
+  if(!head || !tabs.classList.contains("stuck")) return null;
+  return head.getBoundingClientRect().top - (tabs.getBoundingClientRect().bottom + 12);
+}
+/* 捲動停下來時：剛變成置頂、標題剛好被蓋住一點或下面空太多，就輕輕對齊到置頂列正下方 */
+let snapping = false;
+function snapTitle(){
+  if(snapping) return;
+  const g = titleGap(); if(g === null || Math.abs(g) < 3) return;
+  const headH = $("#dayPanel .day-head").offsetHeight;
+  if(g > -(headH + 24) && g < 90){
+    snapping = true;
+    scrollBy({top: g, behavior: motionOK() ? "smooth" : "auto"});
+    setTimeout(() => { snapping = false; }, 450);
+  }
+}
+let snapTimer;
+if("onscrollend" in window) addEventListener("scrollend", () => setTimeout(snapTitle, 30));
+else addEventListener("scroll", () => { clearTimeout(snapTimer); snapTimer = setTimeout(snapTitle, 160); }, {passive:true});
+
+/* ---------- 版本：每次更新網頁都會改這裡，看「分享與設定」就知道瀏覽器拿到的是不是新版 ---------- */
+const APP_VERSION = "第 37 版（2026/11/17）：修正置頂日期點了會變大、置頂時看不到標題";
+$("#appVersion").textContent = APP_VERSION;
 
 /* ---------- 開始 ---------- */
 load();
