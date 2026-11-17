@@ -281,6 +281,7 @@ dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
 .map-style-sw button.on{background:var(--primary)}
 .leaflet-tooltip{font-family:var(--font);border:2px solid var(--ink);border-radius:10px;box-shadow:2px 2px 0 var(--ink)}
 dialog#mapDlg{width:min(900px,calc(100vw - 24px));padding:0}
+dialog:focus,dialog:focus-visible{outline:none}
 .big-map{height:min(70dvh,620px);border-top:0;isolation:isolate}
 @media (max-width:520px){ .big-map{height:72dvh} }
 @keyframes flashCard{0%,60%{background:var(--primary)}100%{background:var(--card)}}
@@ -1549,11 +1550,16 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   if(!touch){ const first = $('input[type="text"],input:not([type]),textarea', form); if(first) first.focus({preventScroll:true}); }
   else { const h = $(".dlg-head h3", dlg); if(h) h.focus({preventScroll:true}); }
 }
-/* 只有「在背景按下、也在背景放開」才關閉；在輸入框裡拖曳選字不會誤關 */
-const outsideDlg = e => { const r = dlg.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
-let downOnBackdrop = false;
-dlg.addEventListener("pointerdown", e => { downOnBackdrop = e.target === dlg && outsideDlg(e); });
-dlg.addEventListener("click", e => { if(downOnBackdrop && e.target === dlg && outsideDlg(e)) dlg.close(); downOnBackdrop = false; });
+/* 點視窗外面的灰色區域就關閉：只有「在外面按下、也在外面放開」才算，
+   在輸入框裡拖曳選字、或在地圖上拖曳時，不會誤關 */
+function closeOnBackdrop(d){
+  const outside = e => { const r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+  let downOut = false;
+  d.addEventListener("pointerdown", e => { downOut = e.target === d && outside(e); });
+  d.addEventListener("click", e => { if(downOut && e.target === d && outside(e)) d.close(); downOut = false; });
+}
+closeOnBackdrop(dlg);
+closeOnBackdrop($("#mapDlg"));
 
 const FLIGHT_FIELDS = [
   [{k:"label",label:"標籤",ph:"去程／回程／轉機",def:"去程"},{k:"date",label:"日期",type:"date"}],
@@ -1987,7 +1993,17 @@ if("IntersectionObserver" in window){
     dayIO?.disconnect();
     dayIO = new IntersectionObserver(([en]) => {
       const stuck = !en.isIntersecting && en.boundingClientRect.top < en.rootBounds.top + 2;
-      $("#dayTabs").classList.toggle("stuck", stuck);
+      const tabs = $("#dayTabs");
+      if(stuck === tabs.classList.contains("stuck")) return;
+      // 變成小置頂列時高度會變矮；把少掉的高度補在下面，下方的地圖和行程就不會往上跳、被蓋住
+      if(stuck){
+        const full = tabs.offsetHeight;
+        tabs.classList.add("stuck");
+        tabs.style.marginBottom = Math.max(0, full - tabs.offsetHeight) + "px";
+      } else {
+        tabs.classList.remove("stuck");
+        tabs.style.marginBottom = "";
+      }
     }, {rootMargin: `-${$("#nav").offsetHeight}px 0px 0px 0px`, threshold: 0});
     dayIO.observe($("#dayTabsSentinel"));
   };
