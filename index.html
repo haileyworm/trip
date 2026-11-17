@@ -1259,8 +1259,8 @@ function renderDays(bounce){
       <span class="edit-only" style="gap:6px"><button class="btn icon-btn" data-act="edit-day" data-id="${day.id}" aria-label="編輯這一天">✏️</button><button class="btn icon-btn" data-act="del-day" data-id="${day.id}" aria-label="刪除這一天">🗑️</button></span>
     </div>
     ${mapPoints.length ? `<div class="day-map-wrap"><div class="day-map" id="dayMap" aria-label="這一天的地點地圖"></div><button type="button" class="btn icon-btn map-full" data-act="map-full" aria-label="放大地圖">⛶</button></div>` : ""}
-    ${canEdit && editing ? `<p class="muted map-hint">🗺️ 編輯完按「✅ 完成」，地圖會依照新的地點自動更新。</p>` : ""}
-    ${canEdit && unfound.length ? `<p class="muted map-hint">⚠️ 地圖上找不到：${unfound.map(esc).join("、")}。可以改成更完整的名稱或地址（例如加上城市名），再按「完成」重新定位。</p>` : ""}
+    ${canEdit && editing ? `<p class="muted map-hint">🗺️ 編輯完按「✅ 完成」，地圖會依照新的地點自動更新。標錯位置的話，把地點改成更完整的名稱、日文名，或直接填座標（例如「35.7138, 139.7773」）。</p>` : ""}
+    ${canEdit && unfound.length ? `<p class="muted map-hint">⚠️ 地圖上找不到：${unfound.map(esc).join("、")}。可以改成更完整的名稱、當地寫法（例如日文名）或地址，也可以直接填座標「35.7138, 139.7773」，再按「完成」重新定位。</p>` : ""}
     ${day.items.length ? `<ol class="timeline ${bounce?"bounce":""}">${items}</ol>` : `<div class="empty">這天還沒有安排${canEdit?"，按下方按鈕新增":""}</div>`}
     <button class="btn ghost edit-only" data-act="add-item">＋ 新增行程</button>`;
   hydrateImgs(panel);
@@ -1618,32 +1618,64 @@ function jumpToCard(itemId){
 }
 /* 地點 → 座標（OpenStreetMap 的 Nominatim，免費但每秒最多查 1 次，所以只在按「完成」時查新的地點） */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function geocodeOne(name){
-  const tries = [name, ...name.split(/[\s、，,／/]+/).filter(t => t.length > 1 && t !== name).sort((a,b) => b.length - a.length)].slice(0, 3);
+/* 直接填座標也可以：「35.7138, 139.7773」，或貼 Google 地圖網址（含 @緯度,經度） */
+function parseCoords(name){
+  const m = name.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) || name.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*[,，]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+  if(!m) return null;
+  const lat = +m[1], lng = +m[2];
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lat, lng] : null;
+}
+async function nominatim(q, area, extra = ""){
+  let url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW,zh,ja,en" + extra + "&q=" + encodeURIComponent(q);
+  if(area?.cc) url += "&countrycodes=" + area.cc;   // 只在目的地的國家裡找
+  if(area?.ll){ const [la, lo] = area.ll; url += `&viewbox=${lo-1.5},${la+1.5},${lo+1.5},${la-1.5}`; }   // 優先找目的地附近
+  const r = await fetch(url);
+  if(!r.ok) throw new Error("HTTP " + r.status);
+  return (await r.json())[0] || null;
+}
+async function geocodeOne(name, area){
+  const direct = parseCoords(name); if(direct) return direct;
+  const tries = [name, ...name.split(/[\s、，,／/・]+/).filter(t => t.length > 1 && t !== name).sort((a,b) => b.length - a.length)].slice(0, 3);
   for(let i = 0; i < tries.length; i++){
     if(i) await sleep(1100);
-    try{
-      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=zh-TW,zh,ja,en&q=" + encodeURIComponent(tries[i]));
-      if(r.ok){ const j = await r.json(); if(j[0]) return [+(+j[0].lat).toFixed(6), +(+j[0].lon).toFixed(6)]; }
-    }catch(e){ console.warn(e); return undefined; }   // 網路錯誤：下次再試
+    try{ const j = await nominatim(tries[i], area); if(j) return [+(+j.lat).toFixed(6), +(+j.lon).toFixed(6)]; }
+    catch(e){ console.warn(e); return undefined; }   // 網路錯誤：下次再試
   }
   return null;   // 真的找不到
+}
+/* 先找出旅程「目的地」在哪個國家，之後的地點都限定在這個國家裡查 */
+async function geocodeArea(dest){
+  const tries = [dest, ...dest.split(/[\s、，,／/・]+/).filter(t => t.length > 1 && t !== dest)].slice(0, 3);
+  for(let i = 0; i < tries.length; i++){
+    if(i) await sleep(1100);
+    try{ const j = await nominatim(tries[i], null, "&addressdetails=1"); if(j && j.address?.country_code) return {q: dest, cc: j.address.country_code, ll: [+j.lat, +j.lon]}; }
+    catch(e){ console.warn(e); return undefined; }
+  }
+  return null;
 }
 let geoBusy = false;
 async function updateGeo(){
   if(geoBusy || !data) return;
   const tripId = currentId, d = data;
   d.geo = d.geo || {};
+  // 第 2 版定位：限定目的地國家。舊的（可能定位錯的）結果清掉重查；目的地改了也重查
+  if(d.geoV !== 2 || (d.geoArea && d.geoArea.q !== d.dest)){ d.geo = {}; d.geoV = 2; delete d.geoArea; }
   const names = [...new Set(d.days.flatMap(day => day.items.flatMap(placesOf)))];
   const todo = names.filter(n => d.geo[n] === undefined);   // 只查新的地點；找不到的改了名稱就會重新查
   if(!todo.length) return;
   geoBusy = true;
   let changed = false;
+  if(!d.geoArea && d.dest && !d.dest.startsWith("目的地")){
+    toast(`🗺️ 確認目的地「${d.dest}」的位置…`);
+    const a = await geocodeArea(d.dest);
+    if(a){ d.geoArea = a; changed = true; }
+    await sleep(1100);
+  }
   for(let i = 0; i < todo.length; i++){
     toast(`🗺️ 地圖定位中 ${i+1} / ${todo.length}：${todo[i]}`);
-    const ll = await geocodeOne(todo[i]);
+    const ll = await geocodeOne(todo[i], d.geoArea);
     if(ll !== undefined){ d.geo[todo[i]] = ll; changed = true; }
-    if(i < todo.length - 1) await sleep(1100);
+    if(i < todo.length - 1 && !parseCoords(todo[i])) await sleep(1100);
   }
   geoBusy = false;
   if(changed){ writeTrip(tripId, d); if(currentId === tripId) renderDays(false); }
