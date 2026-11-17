@@ -248,6 +248,8 @@ body.editing .edit-only.block{display:flex!important}
 .multi{display:grid;gap:8px}
 .multi-row{display:flex;gap:6px;align-items:center}
 .multi-row input{flex:1;min-width:0}
+.place-ins{flex:1;min-width:0;display:grid;gap:4px}
+.place-ins .pl-url{min-height:36px;font-size:13px;padding:6px 10px;background:var(--paper)}
 .multi-row{border-radius:14px}
 .drag-handle{flex:none;width:28px;height:42px;border:0;background:transparent;font-size:18px;letter-spacing:-3px;color:var(--muted);cursor:grab;touch-action:none;padding:0;border-radius:10px;user-select:none;-webkit-user-select:none}
 .drag-handle:active{cursor:grabbing}
@@ -947,7 +949,29 @@ function compressImage(file, max = 1600){
   });
 }
 /* 行程的地圖地點（可以多個；舊資料只有一個 place 也相容） */
-function placesOf(it){ return (it.places && it.places.length ? it.places : (it.place ? [it.place] : [])).filter(Boolean); }
+/* 行程的地點：可以多個，每個有「名稱」和選填的「Google 地圖連結」（舊資料是純文字也相容） */
+function placeList(it){
+  const raw = it.places && it.places.length ? it.places : (it.place ? [it.place] : []);
+  return raw.map(p => typeof p === "string" ? {name: p, url: ""} : {name: p.name || "", url: p.url || "", ll: p.ll}).filter(p => p.name || p.url);
+}
+function placesOf(it){ return placeList(it).map(p => p.name); }
+/* 從 Google 地圖網址抓座標：優先用地點本身（!3d…!4d…），其次是畫面中心（@緯度,經度） */
+function coordsFromUrl(url){
+  if(!url) return null;
+  let u = url; try{ u = decodeURIComponent(url); }catch(e){}
+  const m = u.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || u.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || u.match(/[?&](?:q|query|ll|destination)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+  if(!m) return null;
+  const lat = +m[1], lng = +m[2];
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [+lat.toFixed(6), +lng.toFixed(6)] : null;
+}
+/* 從 Google 地圖網址抓地點名稱（/maps/place/名稱/…） */
+function nameFromUrl(url){
+  const m = (url || "").match(/\/maps\/place\/([^/@?]+)/);
+  if(!m) return "";
+  try{ return decodeURIComponent(m[1].replace(/\+/g, " ")).trim(); }catch(e){ return m[1]; }
+}
+const isUrl = t => /^https?:\/\//i.test((t || "").trim());
+function placeHref(p){ return isUrl(p.url) ? p.url.trim() : mapUrl(p.name); }
 function durText(a, b){
   if(!a || !b) return "";
   const m = t => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; };
@@ -1184,7 +1208,7 @@ function renderDays(bounce){
   // 單張行程卡片（分頭行動時，卡片上另外標出自己的時段）
   const card = (it, showTime) => {
     const tr = TRANSPORT[it.transport] || TRANSPORT[""];
-    const places = placesOf(it);
+    const places = placeList(it);
     const dur = durText(it.time, it.endTime);
     const imgs = (it.images || []).length ? `<div class="tl-imgs">${it.images.map((id,n) => `<button type="button" data-act="view-img" data-id="${esc(id)}" aria-label="放大第 ${n+1} 張圖片"><img data-img="${esc(id)}" alt="截圖 ${n+1}"></button>`).join("")}</div>` : "";
     return `<div class="tl-card" data-item="${esc(it.id)}">
@@ -1193,7 +1217,7 @@ function renderDays(bounce){
         ${it.note ? `<p class="tl-note">${linkify(it.note)}</p>` : ""}
         ${imgs}
         <div class="tl-actions">
-          ${places.map(pl => `<a class="map-link" href="${mapUrl(pl)}" target="_blank" rel="noopener">📍 ${esc(pl)}</a>`).join("")}
+          ${places.map(pl => `<a class="map-link" href="${esc(placeHref(pl))}" target="_blank" rel="noopener">📍 ${esc(pl.name || "Google 地圖")}</a>`).join("")}
           <button class="btn sm edit-only" data-act="edit-item" data-id="${it.id}">✏️ 編輯</button>
           <button class="btn sm edit-only" data-act="del-item" data-id="${it.id}">🗑️ 刪除</button>
         </div>
@@ -1213,11 +1237,15 @@ function renderDays(bounce){
   // （沒有地標、或地標都還沒定位的卡片直接跳過，編號不會空號）
   const mapPoints = [], unfound = []; let pinN = 0;
   clusters.forEach(c => {
-    const located = c.items.map(it => ({it, pts: placesOf(it).filter(name => { const ll = data.geo?.[name]; if(ll === null) unfound.push(name); return Array.isArray(ll); })}));
+    const located = c.items.map(it => ({it, pts: placeList(it).map(p => {
+      const ll = p.ll || coordsFromUrl(p.url) || data.geo?.[p.name];
+      if(!Array.isArray(ll) && data.geo?.[p.name] === null) unfound.push(p.name);
+      return Array.isArray(ll) ? {name: p.name, ll} : null;
+    }).filter(Boolean)}));
     if(!located.some(x => x.pts.length)) return;
     pinN++;
-    located.forEach(({it, pts}) => pts.forEach((name, pi) => {
-      mapPoints.push({ll: data.geo[name], label: pts.length > 1 ? `${pinN}.${pi+1}` : `${pinN}`, name, itemId: it.id, title: it.title});
+    located.forEach(({it, pts}) => pts.forEach((p, pi) => {
+      mapPoints.push({ll: p.ll, label: pts.length > 1 ? `${pinN}.${pi+1}` : `${pinN}`, name: p.name, itemId: it.id, title: it.title});
     }));
   });
   // 分頭行動的格子：每個時間點是一列，時間重疊的行程放不同欄，同一欄可以上下接續
@@ -1333,7 +1361,13 @@ function renderList(key){
 
 /* ---------- 表單對話框 ---------- */
 const dlg = $("#dlg");
-function multiRow(fd, x){ return `<div class="multi-row"><button type="button" class="drag-handle" data-drag aria-label="按住拖曳調整順序（也可以用鍵盤上下鍵）">⋮⋮</button><input type="text" value="${esc(x)}" placeholder="${esc(fd.ph||"")}" aria-label="${esc(fd.label)}"><button type="button" class="btn icon-btn" data-multi-rm aria-label="移除這個地點">✕</button></div>`; }
+function multiRow(fd, x){
+  const p = typeof x === "string" ? {name: x, url: ""} : (x || {name: "", url: ""});
+  return `<div class="multi-row"><button type="button" class="drag-handle" data-drag aria-label="按住拖曳調整順序（也可以用鍵盤上下鍵）">⋮⋮</button>
+    <div class="place-ins"><input type="text" class="pl-name" value="${esc(p.name)}" placeholder="地點名稱（卡片上顯示這個）" aria-label="地點名稱">
+    <input type="url" class="pl-url" value="${esc(p.url)}" placeholder="Google 地圖連結（選填，地圖會更準）" aria-label="Google 地圖連結" inputmode="url"></div>
+    <button type="button" class="btn icon-btn" data-multi-rm aria-label="移除這個地點">✕</button></div>`;
+}
 /* 只有一個地點時不顯示拖曳把手 */
 function refreshMulti(box){
   const rows = [...box.children];
@@ -1378,7 +1412,7 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     if(fd.type === "select") input = `<select name="${fd.k}">${Object.entries(fd.options).map(([k,l])=>`<option value="${esc(k)}" ${k===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
     else if(fd.type === "textarea") input = `<textarea name="${fd.k}" placeholder="${esc(fd.ph||"")}">${esc(v)}</textarea>`;
     else if(fd.type === "multi"){
-      const list = (Array.isArray(v) ? v : (v ? [v] : [])).filter(Boolean);
+      const list = (Array.isArray(v) ? v : (v ? [v] : [])).filter(x => x && (typeof x === "string" || x.name || x.url));
       const rows = (list.length ? list : [""]).map(x => multiRow(fd, x)).join("");
       return `<div class="field"><span>${esc(fd.label)}</span><div class="multi" data-multi="${fd.k}">${rows}</div><button type="button" class="btn sm" data-multi-add="${fd.k}" style="justify-self:start">＋ 再加一個地點</button></div>`;
     }
@@ -1408,6 +1442,13 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
   </form>`;
   const form = $("#dlgForm");
   $$("[data-multi]", form).forEach(refreshMulti);
+  // 貼上 Google 地圖連結：名稱是空的就自動帶入；連結貼到名稱欄也會自動搬到連結欄
+  form.addEventListener("input", e => {
+    const t = e.target, row = t.closest(".multi-row"); if(!row) return;
+    const nm = $(".pl-name", row), ur = $(".pl-url", row);
+    if(t === nm && isUrl(nm.value) && !ur.value){ ur.value = nm.value.trim(); nm.value = nameFromUrl(ur.value); }
+    else if(t === ur && isUrl(ur.value) && !nm.value.trim()){ nm.value = nameFromUrl(ur.value); }
+  });
   bindDragSort(form);
   // 圖片欄位
   const imgFields = fields.flat().filter(fd => fd.type === "images");
@@ -1470,7 +1511,16 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     const out = {};
     fields.flat().forEach(fd => {
       if(fd.type === "images") return;
-      if(fd.type === "multi"){ out[fd.k] = $$(`[data-multi="${fd.k}"] input`, form).map(i => i.value.trim()).filter(Boolean); return; }
+      if(fd.type === "multi"){
+        out[fd.k] = $$(`[data-multi="${fd.k}"] .multi-row`, form).map(r => {
+          let name = $(".pl-name", r).value.trim(), url = $(".pl-url", r).value.trim();
+          if(isUrl(name) && !url){ url = name; name = ""; }
+          if(!name && url) name = nameFromUrl(url) || "地點";
+          const ll = coordsFromUrl(url);
+          return ll ? {name, url, ll} : {name, url};
+        }).filter(p => p.name || p.url);
+        return;
+      }
       const el = form.elements[fd.k]; out[fd.k] = fd.type==="checkbox" ? el.checked : el.value.trim(); if(fd.upper) out[fd.k] = out[fd.k].toUpperCase();
     });
     if(imgFields.length){
@@ -1510,7 +1560,7 @@ const ITEM_FIELDS = () => [
   [{k:"time",label:"開始時間",type:"time"},{k:"endTime",label:"結束時間（選填）",type:"time",clearable:true}],
   {k:"transport",label:"交通方式（怎麼去）",type:"select",options:Object.fromEntries(Object.entries(TRANSPORT).map(([k,v])=>[k,(v.icon?v.icon+" ":"")+v.label]))},
   {k:"title",label:"行程名稱",req:true,ph:"例如：淺草寺"},
-  {k:"places",label:"Google 地圖搜尋地點（可以加很多個）",ph:"地名或地址，會產生地圖連結",type:"multi"},
+  {k:"places",label:"地點（可以加很多個；貼上 Google 地圖連結，地圖會更準）",ph:"地名或地址，會產生地圖連結",type:"multi"},
   {k:"note",label:"備註",type:"textarea",ph:"門票、營業時間、必吃…"},
   {k:"images",label:"截圖／照片（車票、訂位、地圖…）",type:"images"}
 ];
@@ -1660,7 +1710,7 @@ async function updateGeo(){
   d.geo = d.geo || {};
   // 第 2 版定位：限定目的地國家。舊的（可能定位錯的）結果清掉重查；目的地改了也重查
   if(d.geoV !== 2 || (d.geoArea && d.geoArea.q !== d.dest)){ d.geo = {}; d.geoV = 2; delete d.geoArea; }
-  const names = [...new Set(d.days.flatMap(day => day.items.flatMap(placesOf)))];
+  const names = [...new Set(d.days.flatMap(day => day.items.flatMap(it => placeList(it).filter(p => !p.ll && !coordsFromUrl(p.url) && p.name).map(p => p.name))))];
   const todo = names.filter(n => d.geo[n] === undefined);   // 只查新的地點；找不到的改了名稱就會重新查
   if(!todo.length) return;
   geoBusy = true;
@@ -1748,7 +1798,7 @@ const ACTIONS = {
     if(last?.endTime) t = last.endTime;
     else if(last?.time){ const [h,m] = last.time.split(":").map(Number); t = String(Math.min(h+1,23)).padStart(2,"0")+":"+String(m).padStart(2,"0"); }
     openForm({title:"新增行程", fields:ITEM_FIELDS(), values:{time:t||"09:00",transport:"walk"}, onSave:v => day.items.push({id:uid(),...v})}); },
-  "edit-item"(id){ const it = findDay().items.find(x=>x.id===id); openForm({title:"編輯行程", fields:ITEM_FIELDS(), values:{...it, places:placesOf(it)}, onSave:v => { Object.assign(it,v); delete it.place; }}); },
+  "edit-item"(id){ const it = findDay().items.find(x=>x.id===id); openForm({title:"編輯行程", fields:ITEM_FIELDS(), values:{...it, places:placeList(it)}, onSave:v => { Object.assign(it,v); delete it.place; }}); },
   "view-img"(id){
     const lb = $("#lb"), src = imgCache[id];
     if(!src) return;
