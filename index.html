@@ -184,6 +184,8 @@ body.editing .edit-only.block{display:flex!important}
 /* ---------- 每日行程 ---------- */
 .day-tabs{display:flex;gap:10px;overflow-x:auto;padding:4px 4px 12px;margin:0 -4px;scrollbar-width:none;scroll-snap-type:x proximity;position:sticky;top:var(--nav-h);z-index:30;background:var(--paper)}
 #dayTabsSentinel{height:1px}
+/* 置頂時會調整下方間距，關掉瀏覽器的自動捲動補償，免得把標題又推回置頂列底下 */
+#plan,#plan *{overflow-anchor:none}
 /* 往下看行程時，日期列縮小置頂 */
 .day-tabs.stuck{padding:8px 16px;margin:0 -16px;gap:6px;border-bottom:2px solid var(--ink)}
 .day-tabs.stuck .day-tab{min-width:0;padding:2px 10px;border-radius:999px;border-width:2px;box-shadow:none;white-space:nowrap}
@@ -1999,11 +2001,14 @@ if("IntersectionObserver" in window){
       if(stuck){
         const full = tabs.offsetHeight;
         tabs.classList.add("stuck");
-        // 補回的高度扣掉多出來的空白，讓置頂列和下面內容之間只留一點點距離
+        // 讓「Day X｜標題」剛好出現在置頂列正下方（留 12px）。
+        // 滑動時畫面常會多跑一段，這裡依當下位置補回，不管滑多快，剛置頂時都看得到標題
         const diff = Math.max(0, full - tabs.offsetHeight);
-        tabs.style.marginBottom = diff + "px";
+        tabs.style.marginBottom = "0px";
         const gap = $("#dayPanel").getBoundingClientRect().top - tabs.getBoundingClientRect().bottom;
-        tabs.style.marginBottom = Math.max(0, diff - Math.max(0, gap - 12)) + "px";
+        const need = 12 - gap;
+        // 一下子跳很遠（例如點上方選單、重新整理回到原位）就不硬拉回標題，只補回縮小的高度
+        tabs.style.marginBottom = (need > 320 ? diff : Math.max(0, need)) + "px";
       } else {
         tabs.classList.remove("stuck");
         tabs.style.marginBottom = "";
