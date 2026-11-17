@@ -1645,7 +1645,7 @@ function buildMap(el, points, big){
   const L = window.L, touch = matchMedia("(pointer: coarse)").matches;
   const map = L.map(el, {
     zoomControl: true, attributionControl: true,
-    dragging: big || !touch, tap: false, scrollWheelZoom: big,
+    dragging: big || !touch, tap: false, scrollWheelZoom: big || !touch,   // 電腦：滑鼠停在地圖上用滾輪縮放
     zoomAnimation: motionOK(), fadeAnimation: motionOK(), markerZoomAnimation: motionOK()
   });
   const styles = mapStyles(), pick = styles[mapStyleId()] || styles[Object.keys(styles)[0]];
@@ -1666,7 +1666,7 @@ function buildMap(el, points, big){
     };
     return box;
   };
-  sw.addTo(map);
+  if(Object.keys(styles).length > 1) sw.addTo(map);   // 只有一種底圖時不顯示切換按鈕
   const lls = points.map(p => p.ll);
   // 路線：深色外框 + 紫色實線，在任何底圖上都看得清楚
   if(lls.length > 1){
@@ -1687,8 +1687,7 @@ function buildMap(el, points, big){
 function mapStyles(){
   const osm = {url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", opt: {maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}};
   const list = {
-    soft: {id: "soft", name: "柔和", ...osm},
-    osm:  {id: "osm",  name: "原色", ...osm}
+    soft: {id: "soft", name: "柔和", ...osm}
   };
   const key = (CFG.cartoKey || "").trim();
   if(key){
