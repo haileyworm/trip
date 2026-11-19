@@ -1351,7 +1351,7 @@ function renderList(key){
   const el = $("#list-" + key), list = data[key], conf = LIST_CONF[key];
   const done = list.filter(isDone).length;
   const pct = list.length ? Math.round(done / list.length * 100) : 0;
-  const row = it => `<li class="check"><label><input type="checkbox" data-list="${key}" data-id="${it.id}" ${isDone(it)?"checked":""}><span>${esc(it.text)}</span></label><button class="btn icon-btn edit-only" data-act="del-check" data-list="${key}" data-id="${it.id}" aria-label="刪除">✕</button></li>`;
+  const row = it => `<li class="check"><label><input type="checkbox" data-list="${key}" data-id="${it.id}" ${isDone(it)?"checked":""}><span>${esc(it.text)}</span></label><button class="btn icon-btn edit-only" data-act="edit-check" data-list="${key}" data-id="${it.id}" aria-label="修改「${esc(it.text)}」">✏️</button><button class="btn icon-btn edit-only" data-act="del-check" data-list="${key}" data-id="${it.id}" aria-label="刪除">✕</button></li>`;
   let body;
   if(!list.length) body = `<p class="muted" style="margin:0">${conf.empty}</p>`;
   else if(conf.grouped){
@@ -1867,6 +1867,18 @@ const ACTIONS = {
   "add-stay"(){ openForm({title:"新增住宿", fields:STAY_FIELDS, values:{checkin:data.start,checkout:data.end}, onSave:v => data.stays.push({id:uid(),...v})}); },
   "edit-stay"(id){ const s = data.stays.find(x=>x.id===id); openForm({title:"編輯住宿", fields:STAY_FIELDS, values:s, onSave:v => Object.assign(s,v)}); },
   "del-stay"(id){ removeWithUndo(data.stays, id, s => s.name); },
+  "edit-check"(id, el){
+    const key = el.dataset.list, it = data[key].find(x => x.id === id); if(!it) return;
+    const fields = [{k:"text", label:"項目名稱", req:true}];
+    if(key === "luggage"){
+      const cats = [...new Set(data.luggage.map(x => x.cat || "其他"))];
+      fields.push({k:"cat", label:"分類", ph:"例如：衣物", list:() => cats});
+    }
+    openForm({title:"修改項目", fields, values:{text: it.text, cat: it.cat || "其他"}, onSave:v => {
+      it.text = v.text || it.text;
+      if(key === "luggage") it.cat = v.cat || "其他";
+    }});
+  },
   "del-check"(id, el){ removeWithUndo(data[el.dataset.list], id, x => x.text); },
   async share(){
     const url = location.href.split("#")[0];
@@ -2036,7 +2048,7 @@ if("onscrollend" in window) addEventListener("scrollend", () => setTimeout(snapT
 else addEventListener("scroll", () => { clearTimeout(snapTimer); snapTimer = setTimeout(snapTitle, 160); }, {passive:true});
 
 /* ---------- 版本：每次更新網頁都會改這裡，看「分享與設定」就知道瀏覽器拿到的是不是新版 ---------- */
-const APP_VERSION = "第 38 版（2026/11/17）";
+const APP_VERSION = "第 39 版（2026/11/19）";
 $("#appVersion").textContent = APP_VERSION;
 
 /* ---------- 開始 ---------- */
