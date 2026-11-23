@@ -262,10 +262,14 @@ body.editing .edit-only.block{display:flex!important}
 .time-pick{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
 .field .time-pick select{flex:1;min-width:0;padding:8px 6px;text-align:center}
 .time-wrap input{flex:1;min-width:0}
-dialog#lb{background:transparent;border:0;box-shadow:none;padding:0;width:auto;max-width:96vw;max-height:94dvh;margin:auto;border-radius:0;overflow:visible}
-dialog#lb::backdrop{background:rgba(62,58,57,.75)}
-dialog#lb img{display:block;max-width:96vw;max-height:88dvh;border:var(--line) solid var(--ink);border-radius:var(--radius-sm);background:var(--card);cursor:zoom-out}
-dialog#lb p{margin:8px 0 0;text-align:center;color:var(--paper);font-size:13px}
+dialog#lb[open]{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:56px 12px 24px;border:0;border-radius:0;box-shadow:none;background:rgba(62,58,57,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;overscroll-behavior:contain;touch-action:pinch-zoom;animation:none}
+dialog#lb::backdrop{background:transparent}
+dialog#lb img{display:block;max-width:100%;max-height:calc(100dvh - 120px);object-fit:contain;border:var(--line) solid var(--ink);border-radius:var(--radius-sm);background:var(--card)}
+dialog#lb p{margin:0;text-align:center;color:var(--paper);font-size:13px}
+dialog#lb .lb-close{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:var(--card)}
+/* 開著視窗時，後面的頁面不跟著捲 */
+html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
+dialog{overscroll-behavior:contain}
 .tag{display:inline-flex;align-items:center;gap:4px;border:2px solid var(--ink);border-radius:999px;padding:0 10px;font-size:13px;line-height:1.7;background:var(--card)}
 .tag.coral{background:var(--coral)}.tag.primary{background:var(--primary)}.tag.yellow{background:var(--yellow)}.tag.water{background:var(--water)}.tag.bamboo{background:var(--bamboo)}
 .day-map-wrap{position:relative;margin:0 0 16px}
@@ -1311,9 +1315,15 @@ function renderDays(bounce){
     if(tab){ tab.classList.add("pop"); tab.parentElement.scrollTo({left: tab.offsetLeft - tab.parentElement.clientWidth/2 + tab.offsetWidth/2, behavior: motionOK() ? "smooth" : "auto"}); }
     // 在置頂狀態切換日期時，捲回這一天的開頭
     if(tabs.classList.contains("stuck")){
-      // 維持小置頂列，捲到「Day X｜標題」剛好在置頂列正下方
-      const g = titleGap();
-      if(g !== null && Math.abs(g) > 2){ snapping = true; scrollBy({top: g, behavior: motionOK() ? "smooth" : "auto"}); setTimeout(() => { snapping = false; }, 450); }
+      // 維持小置頂列，捲到新的這一天「Day X｜標題」剛好在置頂列正下方
+      // （直接用標題在整頁的位置計算，就算日期列當下被推出畫面也不會算錯）
+      const head = $(".day-head", panel);
+      if(head){
+        const y = head.getBoundingClientRect().top + scrollY - ($("#nav").offsetHeight + tabs.offsetHeight + 12);
+        snapping = true;
+        scrollTo({top: Math.max(0, y), behavior: motionOK() ? "smooth" : "auto"});
+        setTimeout(() => { snapping = false; }, 600);
+      }
     }
   }
 }
@@ -1548,7 +1558,7 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     onSave(out); dlg.close(); save(); render();
   });
   $$("[data-close]", dlg).forEach(b => b.onclick = () => dlg.close());
-  dlg.showModal();
+  showDlg(dlg);
   // 只有用滑鼠的電腦才自動把游標放進第一個「文字」欄位；手機、平板不自動聚焦，免得時間選單或鍵盤直接跳出來
   const touch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   if(!touch){ const first = $('input[type="text"],input:not([type]),textarea', form); if(first) first.focus({preventScroll:true}); }
@@ -1556,6 +1566,15 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
 }
 /* 點視窗外面的灰色區域就關閉：只有「在外面按下、也在外面放開」才算，
    在輸入框裡拖曳選字、或在地圖上拖曳時，不會誤關 */
+/* 打開視窗：鎖住後面的頁面；視窗全部關掉時解鎖 */
+function showDlg(d){
+  d.showModal();
+  document.documentElement.classList.add("modal-open");
+  if(!d.dataset.lockBound){
+    d.dataset.lockBound = "1";
+    d.addEventListener("close", () => { if(!$$("dialog[open]").length) document.documentElement.classList.remove("modal-open"); });
+  }
+}
 function closeOnBackdrop(d){
   const outside = e => { const r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
   let downOut = false;
@@ -1824,7 +1843,7 @@ const ACTIONS = {
     $$("[data-close]", dlg).forEach(b => b.onclick = () => dlg.close());
     $("#confirmDel").onclick = () => { dlg.close(); removeTrip(id); go(null);
       toast(`已刪除「${d.title}」`, () => { writeTrip(id, d, true); route(); }); };
-    dlg.showModal();
+    showDlg(dlg);
   },
   "toggle-edit"(){ if(!canEdit) return; editing = !editing; render(); toast(editing ? "編輯模式：點 ✏️ 修改、🗑️ 刪除" : (CLOUD ? "已同步給所有人 ✓" : "已儲存 ✓"));
     if(!editing) setTimeout(updateGeo, 800); },
@@ -1833,7 +1852,7 @@ const ACTIONS = {
     dlgM.innerHTML = `<div class="dlg-head"><h3>🗺️ 這一天的地點</h3><button class="btn icon-btn" data-close-map aria-label="關閉">✕</button></div><div id="bigMap" class="big-map"></div><p class="muted" style="margin:8px 14px 12px">點數字會跳到對應的行程卡片</p>`;
     $("[data-close-map]", dlgM).onclick = () => dlgM.close();
     dlgM.onclose = () => { if(bigMap){ bigMap.remove(); bigMap = null; } };
-    dlgM.showModal();
+    showDlg(dlgM);
     await loadLeaflet();
     bigMap = buildMap($("#bigMap"), dayMapPoints, true);
     setTimeout(() => bigMap && bigMap.invalidateSize(), 60);
@@ -1859,9 +1878,9 @@ const ACTIONS = {
   "view-img"(id){
     const lb = $("#lb"), src = imgCache[id];
     if(!src) return;
-    lb.innerHTML = `<img src="${src}" alt="放大的截圖"><p>點一下關閉</p>`;
+    lb.innerHTML = `<button type="button" class="btn icon-btn lb-close" aria-label="關閉">✕</button><img src="${src}" alt="放大的截圖"><p>點任何地方關閉</p>`;
     lb.onclick = () => lb.close();
-    lb.showModal();
+    showDlg(lb);
   },
   "del-item"(id){ removeWithUndo(findDay().items, id, it => it.title); },
   "add-stay"(){ openForm({title:"新增住宿", fields:STAY_FIELDS, values:{checkin:data.start,checkout:data.end}, onSave:v => data.stays.push({id:uid(),...v})}); },
@@ -1894,7 +1913,7 @@ const ACTIONS = {
     $$("[data-close]", dlg).forEach(b => b.onclick = () => dlg.close());
     $("#copyLink").onclick = async () => { try{ await navigator.clipboard.writeText(url); toast("已複製網址 ✓"); }catch(e){ const r=document.createRange(); r.selectNodeContents($(".share-box",dlg)); getSelection().removeAllRanges(); getSelection().addRange(r); toast("請手動複製選取的網址"); } };
     const ns = $("#nativeShare"); if(ns) ns.onclick = () => navigator.share({title:shareTitle, text:data ? `${data.title}｜${data.dest}` : shareTitle, url}).catch(()=>{});
-    dlg.showModal();
+    showDlg(dlg);
   },
   async login(){
     if(!fb) return toast("Firebase 還沒準備好，請稍等");
@@ -2029,6 +2048,9 @@ if("IntersectionObserver" in window){
 function titleGap(){
   const head = $("#dayPanel .day-head"), tabs = $("#dayTabs");
   if(!head || !tabs.classList.contains("stuck")) return null;
+  // 日期列必須真的停在頂端（沒被下面的「住宿資訊」推走）才算
+  const pinned = Math.abs(tabs.getBoundingClientRect().top - $("#nav").offsetHeight) < 3;
+  if(!pinned) return null;
   return head.getBoundingClientRect().top - (tabs.getBoundingClientRect().bottom + 12);
 }
 /* 捲動停下來時：剛變成置頂、標題剛好被蓋住一點或下面空太多，就輕輕對齊到置頂列正下方 */
@@ -2048,7 +2070,7 @@ if("onscrollend" in window) addEventListener("scrollend", () => setTimeout(snapT
 else addEventListener("scroll", () => { clearTimeout(snapTimer); snapTimer = setTimeout(snapTitle, 160); }, {passive:true});
 
 /* ---------- 版本：每次更新網頁都會改這裡，看「分享與設定」就知道瀏覽器拿到的是不是新版 ---------- */
-const APP_VERSION = "第 39 版（2026/11/19）";
+const APP_VERSION = "第 41 版（2026/11/23）";
 $("#appVersion").textContent = APP_VERSION;
 
 /* ---------- 開始 ---------- */
