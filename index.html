@@ -262,10 +262,13 @@ body.editing .edit-only.block{display:flex!important}
 .time-pick{display:flex;align-items:center;gap:4px;flex:1;min-width:0}
 .field .time-pick select{flex:1;min-width:0;padding:8px 6px;text-align:center}
 .time-wrap input{flex:1;min-width:0}
-dialog#lb[open]{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:56px 12px 24px;border:0;border-radius:0;box-shadow:none;background:rgba(62,58,57,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;overscroll-behavior:contain;touch-action:pinch-zoom;animation:none}
+dialog#lb[open]{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:56px 12px 24px;border:0;border-radius:0;box-shadow:none;background:rgba(62,58,57,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;overscroll-behavior:contain;touch-action:none;animation:none;overflow:hidden}
 dialog#lb::backdrop{background:transparent}
 dialog#lb img{display:block;max-width:100%;max-height:calc(100dvh - 120px);object-fit:contain;border:var(--line) solid var(--ink);border-radius:var(--radius-sm);background:var(--card)}
-dialog#lb p{margin:0;text-align:center;color:var(--paper);font-size:13px}
+dialog#lb img{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none;transform-origin:center center;will-change:transform;cursor:zoom-in;position:relative;z-index:1}
+dialog#lb img.smooth{transition:transform .22s ease-out}
+dialog#lb .lb-close{z-index:3}
+dialog#lb p{position:relative;z-index:2;margin:0;text-align:center;color:var(--paper);font-size:13px}
 dialog#lb .lb-close{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;background:var(--card)}
 /* 開著視窗時，後面的頁面不跟著捲 */
 html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
@@ -1610,6 +1613,81 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
 }
 /* 點視窗外面的灰色區域就關閉：只有「在外面按下、也在外面放開」才算，
    在輸入框裡拖曳選字、或在地圖上拖曳時，不會誤關 */
+/* 放大圖片時可以自己縮放、拖曳：兩指縮放、點兩下放大／還原、滑鼠滾輪縮放、放大後拖曳移動 */
+function bindZoom(lb, img){
+  let s = 1, tx = 0, ty = 0, g = null, moved = false, lastTap = 0, tapTimer = null;
+  const pts = new Map();
+  const MAX = 5;
+  const apply = smooth => {
+    img.classList.toggle("smooth", !!smooth);
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+    img.style.cursor = s > 1 ? "grab" : "zoom-in";
+  };
+  const clampT = () => {
+    if(s <= 1.001){ s = 1; tx = 0; ty = 0; return; }
+    const mx = img.offsetWidth * (s - 1) / 2 + 40, my = img.offsetHeight * (s - 1) / 2 + 40;
+    tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty));
+  };
+  // 以畫面上某一點為中心縮放（那一點停在手指／滑鼠底下）
+  const zoomAt = (ns, px, py, smooth) => {
+    ns = Math.max(1, Math.min(MAX, ns));
+    const r = img.getBoundingClientRect(), cx = r.left + r.width / 2 - tx, cy = r.top + r.height / 2 - ty;
+    const qx = (px - cx - tx) / s, qy = (py - cy - ty) / s;
+    s = ns; tx = px - cx - s * qx; ty = py - cy - s * qy;
+    clampT(); apply(smooth);
+  };
+  const begin = () => {
+    const a = [...pts.values()];
+    const r = img.getBoundingClientRect();
+    g = {s, tx, ty, cx: r.left + r.width / 2 - tx, cy: r.top + r.height / 2 - ty,
+      d: a.length > 1 ? Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y) : 0,
+      mx: a.length > 1 ? (a[0].x + a[1].x) / 2 : a[0].x, my: a.length > 1 ? (a[0].y + a[1].y) / 2 : a[0].y};
+  };
+  img.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    img.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if(pts.size === 1) moved = false;
+    begin();
+  });
+  img.addEventListener("pointermove", e => {
+    if(!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    const a = [...pts.values()];
+    if(a.length >= 2 && g.d){
+      const d = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), mx = (a[0].x + a[1].x) / 2, my = (a[0].y + a[1].y) / 2;
+      const ns = Math.max(1, Math.min(MAX, g.s * d / g.d));
+      const qx = (g.mx - g.cx - g.tx) / g.s, qy = (g.my - g.cy - g.ty) / g.s;
+      s = ns; tx = mx - g.cx - s * qx; ty = my - g.cy - s * qy;
+      moved = true; clampT(); apply(false);
+    } else if(a.length === 1){
+      const dx = a[0].x - g.mx, dy = a[0].y - g.my;
+      if(Math.hypot(dx, dy) > 6) moved = true;
+      if(s > 1 && moved){ tx = g.tx + dx; ty = g.ty + dy; clampT(); apply(false); }
+    }
+  });
+  const end = e => {
+    if(!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if(pts.size){ begin(); return; }
+    if(moved) return;
+    // 沒有移動＝點一下：點兩下放大／還原
+    const now = Date.now();
+    if(now - lastTap < 300){
+      clearTimeout(tapTimer); lastTap = 0;
+      if(s > 1){ s = 1; tx = 0; ty = 0; apply(true); } else zoomAt(2.5, e.clientX, e.clientY, true);
+    } else lastTap = now;
+  };
+  img.addEventListener("pointerup", end);
+  img.addEventListener("pointercancel", end);
+  img.addEventListener("click", e => e.stopPropagation());   // 點圖片本身不關閉
+  lb.onwheel = e => {   // 用 onwheel 覆蓋，重複打開圖片也不會疊加
+    e.preventDefault();
+    zoomAt(s * Math.exp(-e.deltaY * 0.0022), e.clientX, e.clientY, false);
+  };
+  apply(false);
+}
+
 /* 打開視窗：鎖住後面的頁面；視窗全部關掉時解鎖 */
 function showDlg(d){
   d.showModal();
@@ -1927,9 +2005,11 @@ const ACTIONS = {
   "view-img"(id){
     const lb = $("#lb"), src = imgCache[id];
     if(!src) return;
-    lb.innerHTML = `<button type="button" class="btn icon-btn lb-close" aria-label="關閉">✕</button><img src="${src}" alt="放大的截圖"><p>點任何地方關閉</p>`;
-    lb.onclick = () => lb.close();
+    const touch = matchMedia("(pointer: coarse)").matches;
+    lb.innerHTML = `<button type="button" class="btn icon-btn lb-close" aria-label="關閉">✕</button><img src="${src}" alt="放大的截圖" draggable="false"><p>${touch ? "兩指縮放・點兩下放大・點空白處關閉" : "滾輪縮放・點兩下放大・點空白處關閉"}</p>`;
+    lb.onclick = e => { if(!e.target.closest("img")) lb.close(); };
     showDlg(lb);
+    bindZoom(lb, $("img", lb));
   },
   "del-item"(id){ removeWithUndo(findDay().items, id, it => it.title); },
   "add-stay"(){ openForm({title:"新增住宿", fields:STAY_FIELDS, values:{checkin:data.start,checkout:data.end}, onSave:v => data.stays.push({id:uid(),...v})}); },
@@ -2122,7 +2202,7 @@ if("onscrollend" in window) addEventListener("scrollend", () => setTimeout(snapT
 else addEventListener("scroll", () => { clearTimeout(snapTimer); snapTimer = setTimeout(snapTitle, 160); }, {passive:true});
 
 /* ---------- 版本：每次更新網頁都會改這裡，看「分享與設定」就知道瀏覽器拿到的是不是新版 ---------- */
-const APP_VERSION = "第 43 版（2026/11/26）";
+const APP_VERSION = "第 44 版（2026/11/26）";
 $("#appVersion").textContent = APP_VERSION;
 
 /* ---------- 開始 ---------- */
