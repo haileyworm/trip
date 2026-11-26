@@ -325,6 +325,23 @@ dialog:focus,dialog:focus-visible{outline:none}
 .add-row input,.add-row select{flex:1;min-width:120px;border:2px solid var(--ink);border-radius:12px;padding:6px 10px;background:var(--paper)}
 .add-row .btn{flex:none}
 
+/* ---------- 折價券 ---------- */
+.coupon-grid{display:grid;gap:10px;margin-bottom:14px}
+/* 每排最多 8 張，左右滑動；超過 8 張才換下一排 */
+.coupon-row{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 16px 10px;margin:0 -16px;scroll-padding:0 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.coupon-row::-webkit-scrollbar{display:none}
+.coupon-row > .coupon{flex:0 0 min(42vw,170px);scroll-snap-align:start}
+.coupon{background:var(--card);border:var(--line) solid var(--ink);border-radius:20px;box-shadow:3px 3px 0 var(--ink);overflow:hidden;display:flex;flex-direction:column;position:relative}
+.coupon-img{display:block;position:relative;width:100%;height:0;padding:0 0 75%;border:0;border-bottom:var(--line) solid var(--ink);background:var(--paper);cursor:zoom-in;overflow:hidden}
+.coupon-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.coupon-noimg{display:grid;place-items:center;width:100%;aspect-ratio:4/3;border-bottom:var(--line) solid var(--ink);background:var(--yellow);font-size:34px}
+.coupon-body{padding:8px 12px 12px}
+.coupon-body h3{font-size:16px;word-break:break-word}
+.coupon-body p{margin:2px 0 0;font-size:13px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.coupon .card-tools{top:8px;right:8px;z-index:2}
+.coupon .card-tools .icon-btn{background:var(--card)}
+.coupon-grid .empty{grid-column:1/-1;margin:0}
+
 /* ---------- 工具 ---------- */
 .tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .tools-grid .btn{width:100%;padding:10px}
@@ -429,6 +446,7 @@ html.no-motion{scroll-behavior:auto}
     <a href="#todo">✅ 待辦</a>
     <a href="#prep">📋 出發前</a>
     <a href="#bag">🧳 行李</a>
+    <a href="#coupon">🎟️ 優惠</a>
   </nav>
 </header>
 
@@ -527,6 +545,15 @@ html.no-motion{scroll-behavior:auto}
       <span class="chip-ico" style="background:var(--coral)">🧳</span><h2>行李清單</h2>
     </div>
     <div class="card" id="list-luggage"></div>
+  </section>
+
+  <!-- 折價券／優惠 -->
+  <section id="coupon">
+    <div class="sec-title">
+      <span class="chip-ico" style="background:var(--yellow)">🎟️</span><h2>折價券・優惠</h2>
+    </div>
+    <div class="coupon-grid" id="couponList"></div>
+    <button class="btn ghost edit-only" data-act="add-coupon">＋ 新增折價券</button>
   </section>
   </div><!-- /tripView -->
 
@@ -800,7 +827,7 @@ function todayStr(){ return addDays(null, 0); }
 function blankTrip(){
   const t = addDays(null, 30);
   return {v:2,title:"我的旅行",subtitle:"寫一句旅行的小目標",dest:"目的地",theme:"japan",start:t,end:addDays(t,2),
-    flights:[],days:[0,1,2].map(i=>({id:uid(),date:addDays(t,i),title:"",items:[]})),stays:[],todos:[],predepart:[],luggage:[]};
+    flights:[],days:[0,1,2].map(i=>({id:uid(),date:addDays(t,i),title:"",items:[]})),stays:[],todos:[],predepart:[],luggage:[],coupons:[]};
 }
 function normalize(d){
   const b = blankTrip();
@@ -1094,7 +1121,7 @@ function render(){
     document.title = `${data.title} ✈ 旅遊手帳`;
     $("#brandName").textContent = data.title || "旅遊手帳";
     renderHero(); renderFlights(); renderDays(); renderStays();
-    renderList("todos"); renderList("predepart"); renderList("luggage");
+    renderList("todos"); renderList("predepart"); renderList("luggage"); renderCoupons();
   } else {
     document.title = "我的旅遊手帳";
     $("#brandName").textContent = "我的旅遊手帳";
@@ -1328,6 +1355,22 @@ function renderDays(bounce){
   }
 }
 
+function renderCoupons(){
+  const el = $("#couponList"), list = data.coupons || [];
+  if(!list.length){ el.innerHTML = `<div class="empty">還沒有折價券${canEdit ? "，按「✏️ 編輯」來新增" : ""}</div>`; return; }
+  const card = c => {
+    const img = (c.images || [])[0];
+    return `<article class="coupon">
+      ${tools("coupon", c.id)}
+      ${img ? `<button type="button" class="coupon-img" data-act="view-img" data-id="${esc(img)}" aria-label="放大「${esc(c.title)}」"><img data-img="${esc(img)}" alt="${esc(c.title)}"></button>` : `<div class="coupon-noimg" aria-hidden="true">🎟️</div>`}
+      <div class="coupon-body"><h3>${esc(c.title || "折價券")}</h3>${c.subtitle ? `<p>${linkify(c.subtitle)}</p>` : ""}</div>
+    </article>`;
+  };
+  const rows = [];
+  for(let i = 0; i < list.length; i += 8) rows.push(list.slice(i, i + 8));
+  el.innerHTML = rows.map((r, ri) => `<div class="coupon-row" aria-label="折價券第 ${ri+1} 排（可左右滑動）">${r.map(card).join("")}</div>`).join("");
+  hydrateImgs(el);
+}
 function renderStays(){
   const el = $("#stayList");
   if(!data.stays.length){ el.innerHTML = `<div class="empty">還沒有住宿資料${canEdit?"，按「✏️ 編輯」來新增":""}</div>`; return; }
@@ -1484,7 +1527,8 @@ function openForm({title, fields, values={}, onSave, saveText="儲存"}){
     const list = [...files].filter(f => f.type && f.type.startsWith("image/"));
     if(!list.length) return;
     for(const file of list){
-      if(imgState[k].length >= 8){ toast("每個行程最多 8 張圖片"); break; }
+      const maxN = (fields.flat().find(f => f.k === k) || {}).max || 8;
+      if(imgState[k].length >= maxN){ toast(maxN === 1 ? "只能放 1 張圖，先按 ✕ 移除舊的再換" : `最多 ${maxN} 張圖片`); break; }
       try{ const src = await compressImage(file); imgState[k].push({id:"img" + Date.now().toString(36) + uid().slice(0,4), src, isNew:true}); drawPreviews(k); }
       catch(err){ toast(err.message || "圖片讀取失敗"); }
     }
@@ -1599,6 +1643,11 @@ const ITEM_FIELDS = () => [
   {k:"places",label:"地點（可以加很多個；貼上 Google 地圖連結，地圖會更準）",ph:"地名或地址，會產生地圖連結",type:"multi"},
   {k:"note",label:"備註",type:"textarea",ph:"門票、營業時間、必吃…"},
   {k:"images",label:"截圖／照片（車票、訂位、地圖…）",type:"images"}
+];
+const COUPON_FIELDS = [
+  {k:"images", label:"圖片（折價券、優惠截圖）", type:"images", max:1},
+  {k:"title", label:"標題", req:true, ph:"例如：唐吉訶德 免稅 10% + 5%"},
+  {k:"subtitle", label:"小副標題（選填）", ph:"例如：滿 ¥10,000 可用、結帳出示條碼"}
 ];
 const STAY_FIELDS = [
   {k:"name",label:"住宿名稱",req:true},
@@ -1885,6 +1934,9 @@ const ACTIONS = {
   "del-item"(id){ removeWithUndo(findDay().items, id, it => it.title); },
   "add-stay"(){ openForm({title:"新增住宿", fields:STAY_FIELDS, values:{checkin:data.start,checkout:data.end}, onSave:v => data.stays.push({id:uid(),...v})}); },
   "edit-stay"(id){ const s = data.stays.find(x=>x.id===id); openForm({title:"編輯住宿", fields:STAY_FIELDS, values:s, onSave:v => Object.assign(s,v)}); },
+  "add-coupon"(){ openForm({title:"新增折價券", fields:COUPON_FIELDS, values:{}, onSave:v => { (data.coupons ||= []).push({id:uid(), ...v}); }}); },
+  "edit-coupon"(id){ const c = data.coupons.find(x => x.id === id); openForm({title:"編輯折價券", fields:COUPON_FIELDS, values:c, onSave:v => Object.assign(c, v)}); },
+  "del-coupon"(id){ removeWithUndo(data.coupons, id, c => c.title); },
   "del-stay"(id){ removeWithUndo(data.stays, id, s => s.name); },
   "edit-check"(id, el){
     const key = el.dataset.list, it = data[key].find(x => x.id === id); if(!it) return;
@@ -2070,7 +2122,7 @@ if("onscrollend" in window) addEventListener("scrollend", () => setTimeout(snapT
 else addEventListener("scroll", () => { clearTimeout(snapTimer); snapTimer = setTimeout(snapTitle, 160); }, {passive:true});
 
 /* ---------- 版本：每次更新網頁都會改這裡，看「分享與設定」就知道瀏覽器拿到的是不是新版 ---------- */
-const APP_VERSION = "第 41 版（2026/11/23）";
+const APP_VERSION = "第 43 版（2026/11/26）";
 $("#appVersion").textContent = APP_VERSION;
 
 /* ---------- 開始 ---------- */
